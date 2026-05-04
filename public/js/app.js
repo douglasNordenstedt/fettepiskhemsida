@@ -63,7 +63,7 @@ confirmSendBtn.addEventListener('click', async () => {
     const ParsedJSON = JSON.parse(validJsonData); 
     const payloadToSend = {
         //log: validJsonData,
-        Timestamp: ParsedJSON["@timestamp"],
+        Timestamp: ParsedJSON._source["@timestamp"],
         comment: comment,
         submittedAt: new Date().toISOString()
     };
