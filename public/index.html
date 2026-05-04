@@ -1,26 +1,58 @@
 <!DOCTYPE html>
-<html lang="en">
-<script src="index.js"></script>
+<html lang="sv">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Incident Response - Ingestion</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="js/app.js" defer></script>
 </head>
 <body>
-    <div>
-        <h1>Stoppa in din log här</h1>
-        <input id="loginput">
-        
-        <button>Tryck för att lägga till</button>
+    <nav class="navbar">
+        <h2>🛡️ IR Data Ingestion</h2>
+        <!-- Temporary link to Google Sheets -->
+        <a href="https://docs.google.com/spreadsheets/" target="_blank" class="sheet-btn">
+            📊 Öppna Google Kalkylark
+        </a>
+    </nav>
 
-    </div>
+    <div class="container">
+        <!-- Ingestion Card -->
+        <div class="card">
+            <h1>Stoppa in din logg här</h1>
+            <p>Klistra in rå JSON-logg nedan. En förhandsgranskning visas automatiskt.</p>
+            
+            <textarea id="logInput" placeholder='{"timestamp": "2023-10-25T10:00:00Z", "event": "Login Failed"}'></textarea>
+            
+            <!-- Live Preview Box -->
+            <div class="preview-box">
+                <strong>Förhandsgranskning:</strong>
+                <pre id="logPreview">Väntar på giltig JSON...</pre>
+            </div>
 
-    <div>
-        <h1>Lista på loggar här:</h1>
-        <div id="logs">
+            <button id="preSendBtn" disabled>Granska och Skicka</button>
+            <span id="statusMessage"></span>
+        </div>
 
+        <!-- Last Sent Log (Hidden by default) -->
+        <div class="card" id="lastSentCard" style="display: none; margin-top: 20px; border-color: #10b981;">
+            <h2 style="color: #10b981; margin-top: 0;">✅ Senast inskickade logg</h2>
+            <p><strong>Din kommentar:</strong> <span id="lastComment"></span></p>
+            <pre id="lastLogData" style="background: #0f172a; padding: 10px; border-radius: 4px;"></pre>
         </div>
     </div>
-    
+
+    <!-- Comment Modal (Hidden by default) -->
+    <div id="commentModal" class="modal">
+        <div class="modal-content">
+            <h2>Lägg till en kommentar</h2>
+            <p>Ge kontext till loggen innan den skickas till kalkylarket.</p>
+            <input type="text" id="commentInput" placeholder="T.ex. Hittades på webbservern, misstänkt inloggning..." autocomplete="off">
+            <div class="modal-actions">
+                <button id="cancelBtn" class="btn-secondary">Avbryt</button>
+                <button id="confirmSendBtn" class="btn-primary">Skicka Logg</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

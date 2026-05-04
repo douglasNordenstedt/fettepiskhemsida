@@ -1,0 +1,151 @@
+:root {
+    --bg-color: #0f172a;
+    --card-bg: #1e293b;
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --primary: #3b82f6;
+    --primary-hover: #2563eb;
+    --success: #10b981;
+    --border: #334155;
+}
+
+body {
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+}
+
+.navbar {
+    background-color: var(--card-bg);
+    padding: 15px 30px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.navbar h2 { margin: 0; font-size: 1.2rem; }
+
+.sheet-btn {
+    background-color: #059669;
+    color: white;
+    text-decoration: none;
+    padding: 8px 15px;
+    border-radius: 4px;
+    font-weight: bold;
+    transition: 0.2s;
+}
+
+.sheet-btn:hover { background-color: #047857; }
+
+.container {
+    max-width: 800px; /* Centered, single column layout */
+    margin: 40px auto;
+    padding: 0 20px;
+}
+
+.card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 25px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+}
+
+h1 { margin-top: 0; font-size: 1.5rem; }
+p { color: var(--text-muted); font-size: 0.95rem; }
+
+textarea {
+    width: 100%;
+    height: 120px;
+    background-color: var(--bg-color);
+    color: var(--success);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 15px;
+    font-family: 'Courier New', Courier, monospace;
+    resize: vertical;
+    box-sizing: border-box;
+    margin-bottom: 15px;
+}
+
+textarea:focus { outline: none; border-color: var(--primary); }
+
+.preview-box {
+    background-color: #0f172a;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.preview-box pre {
+    margin: 10px 0 0 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: 'Courier New', Courier, monospace;
+    color: #cbd5e1;
+    font-size: 0.9rem;
+}
+
+/* Buttons */
+button {
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    border: none;
+    transition: 0.2s;
+}
+
+button:disabled {
+    background-color: var(--border);
+    color: var(--text-muted);
+    cursor: not-allowed;
+}
+
+#preSendBtn { background-color: var(--primary); color: white; }
+#preSendBtn:not(:disabled):hover { background-color: var(--primary-hover); }
+
+/* Modal Styling */
+.modal {
+    display: none; 
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-content {
+    background-color: var(--card-bg);
+    padding: 30px;
+    border-radius: 8px;
+    width: 100%;
+    max-width: 400px;
+    border: 1px solid var(--border);
+}
+
+.modal-content input {
+    width: 100%;
+    padding: 10px;
+    margin-top: 10px;
+    margin-bottom: 20px;
+    background-color: var(--bg-color);
+    color: white;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.btn-secondary { background-color: transparent; color: white; border: 1px solid var(--border); }
+.btn-secondary:hover { background-color: var(--border); }
+.btn-primary { background-color: var(--success); color: white; }
+.btn-primary:hover { background-color: #059669; }
