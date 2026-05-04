@@ -6,15 +6,15 @@ const path = require('path');
 const { google } = require('googleapis'); // 1. Lägg till Google API
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 // Middleware för att läsa JSON-body från din app.js
 app.use(express.json());
 
 // 2. Google Sheets Inställningar
-const SPREADSHEET_ID = '15LPZIL3INQxmyJrW8-3GMA86DkwaOz3HtLb4f5oz6fs';
+const SPREADSHEET_ID = '1mzZ7d1cUBALEIvgVhR3seKN6DUQpnpS03sV_8kr0zg8';
 const auth = new google.auth.GoogleAuth({
-    keyFile: path.join(__dirname, 'innovationsdagar-03b7b9f6f6ac.json'),
+    keyFile: path.join(__dirname, 'google-key.json'),
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
@@ -34,7 +34,7 @@ app.post('/api/ingest', async (req, res) => {
 
         await sheets.spreadsheets.values.append({
             spreadsheetId: SPREADSHEET_ID,
-            range: 'Sheet1!A1',
+            range: 'Blad1!A1',
             valueInputOption: 'USER_ENTERED',
             requestBody: { values: [row] },
         });
