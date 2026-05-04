@@ -3,17 +3,57 @@ const https = require('https');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { google } = require('googleapis'); // 1. Lägg till Google API
 
 const app = express();
 const port = 3000;
 
-// Path to certificates
+// Middleware för att läsa JSON-body från din app.js
+app.use(express.json());
+
+// 2. Google Sheets Inställningar
+const SPREADSHEET_ID = '15LPZIL3INQxmyJrW8-3GMA86DkwaOz3HtLb4f5oz6fs';
+const auth = new google.auth.GoogleAuth({
+    keyFile: path.join(__dirname, 'credentials.json'),
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+});
+
+// 3. API-route för att ta emot loggar
+app.post('/api/ingest', async (req, res) => {
+    try {
+        const { log, comment, submittedAt } = req.body;
+        const client = await auth.getClient();
+        const sheets = google.sheets({ version: 'v4', auth: client });
+
+        // Raden som skapas i Sheets
+        const row = [
+            submittedAt,
+            comment,
+            JSON.stringify(log, null, 2)
+        ];
+
+        await sheets.spreadsheets.values.append({
+            spreadsheetId: SPREADSHEET_ID,
+            range: 'Sheet1!A1',
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [row] },
+        });
+
+        res.status(200).json({ success: true });
+    } catch (error) {
+        console.error('❌ Sheets Error:', error);
+        res.status(500).json({ error: 'Kunde inte spara till kalkylbladet.' });
+    }
+});
+
+// Servera statiska filer
+app.use('/', express.static(path.join(__dirname, 'public')));
+
+// --- SERVER START LOGIC ---
+
 const certPath = path.join(__dirname, 'server.cert');
 const keyPath = path.join(__dirname, 'server.key');
 
-app.use('/', express.static(path.join(__dirname, 'public')));
-
-// Check if both certificate files exist
 if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
     const options = {
         key: fs.readFileSync(keyPath),
@@ -24,9 +64,7 @@ if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
         console.log(`🛡️  Certificates found! Secure server running at https://localhost:${port}`);
     });
 } else {
-    // FALLBACK TO HTTP
     http.createServer(app).listen(port, () => {
         console.log(`⚠️  No certificates found. Running in HTTP mode at http://localhost:${port}`);
-        console.log(`💡 Hint: Run 'openssl' command (see README) to enable HTTPS locally.`);
     });
 }
