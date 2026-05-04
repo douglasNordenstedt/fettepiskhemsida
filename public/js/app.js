@@ -61,7 +61,7 @@ cancelBtn.addEventListener('click', () => {
 confirmSendBtn.addEventListener('click', async () => {
     const comment = commentInput.value.trim() || "Ingen kommentar.";
     const payloadToSend = {
-        log: validJsonData,
+        //log: validJsonData,
         comment: comment,
         submittedAt: new Date().toISOString()
     };
