@@ -60,8 +60,10 @@ cancelBtn.addEventListener('click', () => {
 // 4. CONFIRM SEND: When hitting send inside the modal
 confirmSendBtn.addEventListener('click', async () => {
     const comment = commentInput.value.trim() || "Ingen kommentar.";
+    const ParsedJSON = JSON.parse(validJsonData); 
     const payloadToSend = {
         //log: validJsonData,
+        Timestamp: ParsedJSON["@timestamp"],
         comment: comment,
         submittedAt: new Date().toISOString()
     };
