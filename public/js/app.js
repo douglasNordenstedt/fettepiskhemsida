@@ -95,6 +95,7 @@ function renderTimelineView(data) {
                         : (src.user?.name || 'N/A');
 
     const commonFields = [
+        { label: 'Log ID',    value: data._id || 'N/A',                                                color: '#e2e8f0' },
         { label: 'Timestamp', value: src['@timestamp'] || 'N/A',                           color: '#7dd3fc' },
         { label: 'Hostname',  value: src.host?.hostname || 'N/A',                          color: '#f8fafc' },
         { label: 'User',      value: user,                                                  color: '#f8fafc' },
