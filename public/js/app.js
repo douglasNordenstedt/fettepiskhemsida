@@ -66,48 +66,44 @@ confirmSendBtn.addEventListener('click', async () => {
         submittedAt: new Date().toISOString()
     };
 
-    // Hide modal and show loading status
     commentModal.style.display = 'none';
-    statusMessage.textContent = "⏳ Skickar via API...";
+    statusMessage.textContent = "⏳ Skickar till kalkylblad...";
     statusMessage.style.color = "#3b82f6";
     preSendBtn.disabled = true;
 
     try {
-        /* ==========================================
-           BACKEND API CALL STUB 
-           Backend team: integrate with Node.js here!
-           ========================================== */
-        // const response = await fetch('/api/ingest', {
-        //     method: 'POST',
-        //     headers: { 'Content-Type': 'application/json' },
-        //     body: JSON.stringify(payloadToSend)
-        // });
-        
-        // Simulated network delay (Remove this when API is ready)
-        await new Promise(resolve => setTimeout(resolve, 800));
+        // DETTA ÄR INTEGRATIONEN:
+        const response = await fetch('/api/ingest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payloadToSend)
+        });
+
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.error || 'Serverfel');
+        }
 
         // On Success:
-        statusMessage.textContent = "✅ Logg skickad!";
+        statusMessage.textContent = "✅ Logg sparad i Sheets!";
         statusMessage.style.color = "#10b981";
 
-        // Update the "Last Sent Log" card to show the user what they did
         lastComment.textContent = comment;
         lastLogData.textContent = JSON.stringify(validJsonData, null, 2);
         lastSentCard.style.display = 'block';
 
-        // Clear the input and preview for the next log
+        // Återställ formulär
         logInput.value = '';
         logPreview.textContent = "Väntar på giltig JSON...";
         logPreview.style.color = "#94a3b8";
         validJsonData = null;
 
-        // Clear status message after 3 seconds
-        setTimeout(() => { statusMessage.textContent = ""; }, 3000);
+        setTimeout(() => { statusMessage.textContent = ""; }, 4000);
 
     } catch (error) {
-        statusMessage.textContent = "❌ Ett fel uppstod.";
+        statusMessage.textContent = "❌ Fel: " + error.message;
         statusMessage.style.color = "#ef4444";
         preSendBtn.disabled = false;
-        console.error(error);
+        console.error('Fetch error:', error);
     }
 });
