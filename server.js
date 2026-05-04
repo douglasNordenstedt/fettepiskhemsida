@@ -14,7 +14,7 @@ app.use(express.json());
 // 2. Google Sheets Inställningar
 const SPREADSHEET_ID = '15LPZIL3INQxmyJrW8-3GMA86DkwaOz3HtLb4f5oz6fs';
 const auth = new google.auth.GoogleAuth({
-    keyFile: path.join(__dirname, 'credentials.json'),
+    keyFile: path.join(__dirname, 'innovationsdagar-03b7b9f6f6ac.json'),
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
