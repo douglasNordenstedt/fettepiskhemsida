@@ -1,11 +1,11 @@
 const express = require('express');
-const https = require('https');
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
+const https   = require('https');
+const http    = require('http');
+const fs      = require('fs');
+const path    = require('path');
 const { google } = require('googleapis');
 
-const app = express();
+const app  = express();
 const port = process.env.PORT || 3000;
 
 app.use(express.json());
@@ -17,48 +17,39 @@ const auth = new google.auth.GoogleAuth({
 });
 
 // ─────────────────────────────────────────────
-// EVENT-AWARE DETAIL EXTRACTOR  (server-side mirror of app.js)
-// This decides what goes in the "Details" column of the spreadsheet.
-// TO ADD A NEW EVENT TYPE: add a case below with the Sysmon event_id.
+// EVENT-AWARE DETAIL EXTRACTOR  (mirrors app.js)
+// TO ADD A NEW EVENT TYPE: add a case with the Sysmon event_id.
 // ─────────────────────────────────────────────
 function getEventDetails(src) {
     const eventId = String(src.winlog?.event_id || src.event?.code || '');
 
     switch (eventId) {
-        case '1':  // Process Create
+        case '1':
             return src.process?.command_line || src.process?.executable || 'N/A';
-
-        case '3':  // Network Connection
+        case '3':
             return [
                 src.destination?.ip ? `→ ${src.destination.ip}:${src.destination?.port}` : null,
                 src.network?.protocol ? `(${src.network.protocol})` : null
             ].filter(Boolean).join(' ') || 'N/A';
-
-        case '5':  // Process Terminated
+        case '5':
             return src.process?.executable || src.process?.name || 'N/A';
-
-        case '7':  // Image/DLL Loaded
+        case '7':
             return src.file?.path || src.dll?.path || 'N/A';
-
-        case '11': // File Created
+        case '11':
             return src.file?.path || src.file?.name || 'N/A';
-
-        case '12': // Registry Object Added/Deleted
-        case '13': // Registry Value Set
-        case '14': // Registry Key Renamed
+        case '12':
+        case '13':
+        case '14':
             return src.registry?.path || src.registry?.key || 'N/A';
-
-        case '22': { // DNS Query
+        case '22': {
             const domain = src.dns?.question?.name || 'N/A';
-            const ips = src.dns?.resolved_ip;
-            const ipStr = Array.isArray(ips) ? ips.slice(0, 3).join(', ') : (ips || '');
+            const ips    = src.dns?.resolved_ip;
+            const ipStr  = Array.isArray(ips) ? ips.slice(0, 3).join(', ') : (ips || '');
             return ipStr ? `${domain} → ${ipStr}` : domain;
         }
-
-        case '23': // File Delete
-        case '26': // File Delete Logged
+        case '23':
+        case '26':
             return src.file?.path || 'N/A';
-
         default:
             return src.process?.command_line
                 || src.registry?.path
@@ -71,42 +62,43 @@ function getEventDetails(src) {
 
 // ─────────────────────────────────────────────
 // INGEST ROUTE
-// Columns: Timestamp | Hostname | User | Event | Process | Details | Comment
+// Columns: Severity | Timestamp | Hostname | User | Event | Process | Details | Analyst Comment
 // ─────────────────────────────────────────────
 app.post('/api/ingest', async (req, res) => {
     try {
-        const { log, comment, submittedAt } = req.body;
+        const { log, comment, severity, submittedAt } = req.body;
         const src = log._source || {};
 
-        const user = src.user?.domain
-            ? `${src.user.domain}\\${src.user.name}`
-            : (src.user?.name || 'N/A');
-
+        const user      = src.user?.domain
+                            ? `${src.user.domain}\\${src.user.name}`
+                            : (src.user?.name || 'N/A');
         const eventId   = src.winlog?.event_id || src.event?.code || '?';
         const eventType = src.event?.action || src.winlog?.task || 'N/A';
 
         const newRow = [
-            src['@timestamp'] || submittedAt,               // A: Timestamp
-            src.host?.hostname || 'N/A',                    // B: Hostname
-            user,                                           // C: User (DOMAIN\name)
-            `${eventId} — ${eventType}`,                    // D: Event ID + Type
-            src.process?.executable || src.process?.name || 'N/A', // E: Process
-            getEventDetails(src),                           // F: Details (event-specific)
-            comment                                         // G: Analyst Comment
+            severity || '⚪ Info',                                          // A: Severity
+            src['@timestamp'] || submittedAt,                               // B: Timestamp
+            src.host?.hostname || 'N/A',                                   // C: Hostname
+            user,                                                           // D: User
+            `${eventId} — ${eventType}`,                                   // E: Event
+            src.process?.executable || src.process?.name || 'N/A',         // F: Process
+            getEventDetails(src),                                           // G: Details
+            comment                                                         // H: Analyst Comment
         ];
 
-        const headers = ['Timestamp', 'Hostname', 'User', 'Event', 'Process', 'Details', 'Analyst Comment'];
+        const headers = ['Severity', 'Timestamp', 'Hostname', 'User', 'Event', 'Process', 'Details', 'Analyst Comment'];
 
         const client = await auth.getClient();
         const sheets = google.sheets({ version: 'v4', auth: client });
 
-        // Fetch existing data, sort, rewrite
-        const getRows = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Blad1' });
+        const getRows = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID, range: 'Blad1'
+        });
         let allData = getRows.data.values || [];
-        if (allData.length > 0) allData.shift(); // remove old header row
+        if (allData.length > 0) allData.shift(); // drop old header
 
         allData.push(newRow);
-        allData.sort((a, b) => new Date(a[0]) - new Date(b[0]));
+        allData.sort((a, b) => new Date(a[1]) - new Date(b[1])); // sort by Timestamp (col B)
 
         await sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
@@ -115,7 +107,7 @@ app.post('/api/ingest', async (req, res) => {
             requestBody: { values: [headers, ...allData] }
         });
 
-        // Formatting: freeze header + clip wrap
+        // Formatting
         await sheets.spreadsheets.batchUpdate({
             spreadsheetId: SPREADSHEET_ID,
             requestBody: {
@@ -129,7 +121,7 @@ app.post('/api/ingest', async (req, res) => {
                     {
                         repeatCell: {
                             range: { sheetId: 0 },
-                            cell: { userEnteredFormat: { wrapStrategy: 'CLIP' } },
+                            cell: { userEnteredFormat: { wrapStrategy: 'WRAP' } },
                             fields: 'userEnteredFormat.wrapStrategy'
                         }
                     }
@@ -146,14 +138,13 @@ app.post('/api/ingest', async (req, res) => {
 
 app.use('/', express.static(path.join(__dirname, 'public')));
 
-// Server start
 const certPath = path.join(__dirname, 'server.cert');
 const keyPath  = path.join(__dirname, 'server.key');
 
 if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
     https.createServer({ key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) }, app)
-        .listen(port, () => console.log(`🛡️  HTTPS running at https://localhost:${port}`));
+        .listen(port, () => console.log(`🛡️  HTTPS at https://localhost:${port}`));
 } else {
     http.createServer(app)
-        .listen(port, () => console.log(`⚠️  HTTP running at http://localhost:${port}`));
+        .listen(port, () => console.log(`⚠️  HTTP at http://localhost:${port}`));
 }

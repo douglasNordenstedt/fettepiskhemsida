@@ -1,27 +1,39 @@
 // UI Elements
-const logInput = document.getElementById('logInput');
-const logPreview = document.getElementById('logPreview');
-const preSendBtn = document.getElementById('preSendBtn');
+const logInput      = document.getElementById('logInput');
+const logPreview    = document.getElementById('logPreview');
+const preSendBtn    = document.getElementById('preSendBtn');
 const statusMessage = document.getElementById('statusMessage');
 
 // Modal Elements
-const commentModal = document.getElementById('commentModal');
-const commentInput = document.getElementById('commentInput');
-const cancelBtn = document.getElementById('cancelBtn');
+const commentModal  = document.getElementById('commentModal');
+const commentInput  = document.getElementById('commentInput');
+const cancelBtn     = document.getElementById('cancelBtn');
 const confirmSendBtn = document.getElementById('confirmSendBtn');
 
 // Last Sent Elements
-const lastSentCard = document.getElementById('lastSentCard');
-const lastComment = document.getElementById('lastComment');
-const lastLogData = document.getElementById('lastLogData');
+const lastSentCard  = document.getElementById('lastSentCard');
+const lastComment   = document.getElementById('lastComment');
+const lastSeverity  = document.getElementById('lastSeverity');
+const lastLogData   = document.getElementById('lastLogData');
 
-let validJsonData = null;
+let validJsonData   = null;
+let selectedSeverity = null;
+
+// ─────────────────────────────────────────────
+// SEVERITY PICKER
+// ─────────────────────────────────────────────
+document.querySelectorAll('.sev-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.sev-btn').forEach(b => b.classList.remove('sev-active'));
+        btn.classList.add('sev-active');
+        selectedSeverity = btn.dataset.sev;
+        confirmSendBtn.disabled = false; // unlock Send once severity chosen
+    });
+});
 
 // ─────────────────────────────────────────────
 // EVENT-AWARE DETAIL EXTRACTOR
-// Returns a human-readable string for the "Details" field
-// based on the Sysmon/ECS event type.
-// TO ADD A NEW EVENT TYPE: add a case below with the event_id.
+// TO ADD A NEW EVENT TYPE: add a case with the Sysmon event_id.
 // ─────────────────────────────────────────────
 function getEventDetails(src) {
     const eventId = String(src.winlog?.event_id || src.event?.code || '');
@@ -50,18 +62,18 @@ function getEventDetails(src) {
         case '14': // Registry Key Renamed
             return src.registry?.path || src.registry?.key || 'N/A';
 
-        case '22': // DNS Query
+        case '22': { // DNS Query
             const domain = src.dns?.question?.name || 'N/A';
-            const ips = src.dns?.resolved_ip;
-            const ipStr = Array.isArray(ips) ? ips.slice(0, 3).join(', ') : (ips || '');
+            const ips    = src.dns?.resolved_ip;
+            const ipStr  = Array.isArray(ips) ? ips.slice(0, 3).join(', ') : (ips || '');
             return ipStr ? `${domain} → ${ipStr}` : domain;
+        }
 
         case '23': // File Delete
         case '26': // File Delete Logged
             return src.file?.path || 'N/A';
 
         default:
-            // Generic fallback: try common useful fields in order
             return src.process?.command_line
                 || src.registry?.path
                 || src.dns?.question?.name
@@ -72,12 +84,10 @@ function getEventDetails(src) {
 }
 
 // ─────────────────────────────────────────────
-// RENDER PREVIEW — always shows common fields +
-// an event-specific "Details" row at the bottom.
+// RENDER PREVIEW
 // ─────────────────────────────────────────────
 function renderTimelineView(data) {
-    const src = data._source || {};
-
+    const src       = data._source || {};
     const eventId   = src.winlog?.event_id || src.event?.code || '?';
     const eventType = src.event?.action || src.winlog?.task || 'N/A';
     const user      = src.user?.domain
@@ -85,12 +95,12 @@ function renderTimelineView(data) {
                         : (src.user?.name || 'N/A');
 
     const commonFields = [
-        { label: "Timestamp",  value: src['@timestamp'] || 'N/A',              color: '#7dd3fc' },
-        { label: "Hostname",   value: src.host?.hostname || 'N/A',             color: '#f8fafc' },
-        { label: "User",       value: user,                                    color: '#f8fafc' },
-        { label: "Event ID",   value: `${eventId} — ${eventType}`,             color: '#fde68a' },
-        { label: "Process",    value: src.process?.executable || src.process?.name || 'N/A', color: '#f8fafc' },
-        { label: "Details",    value: getEventDetails(src),                    color: '#6ee7b7' },
+        { label: 'Timestamp', value: src['@timestamp'] || 'N/A',                           color: '#7dd3fc' },
+        { label: 'Hostname',  value: src.host?.hostname || 'N/A',                          color: '#f8fafc' },
+        { label: 'User',      value: user,                                                  color: '#f8fafc' },
+        { label: 'Event ID',  value: `${eventId} — ${eventType}`,                          color: '#fde68a' },
+        { label: 'Process',   value: src.process?.executable || src.process?.name || 'N/A', color: '#f8fafc' },
+        { label: 'Details',   value: getEventDetails(src),                                  color: '#6ee7b7' },
     ];
 
     return commonFields.map(f => `
@@ -107,7 +117,7 @@ function renderTimelineView(data) {
 logInput.addEventListener('input', () => {
     const rawData = logInput.value.trim();
     if (!rawData) {
-        logPreview.innerHTML = "Väntar på giltig JSON...";
+        logPreview.innerHTML = 'Väntar på giltig JSON...';
         preSendBtn.disabled = true;
         validJsonData = null;
         return;
@@ -126,8 +136,13 @@ logInput.addEventListener('input', () => {
 
 // OPEN MODAL
 preSendBtn.addEventListener('click', () => {
-    commentModal.style.display = 'flex';
+    // Reset severity state each time
+    selectedSeverity = null;
+    document.querySelectorAll('.sev-btn').forEach(b => b.classList.remove('sev-active'));
+    confirmSendBtn.disabled = true;
     commentInput.value = '';
+
+    commentModal.style.display = 'flex';
     commentInput.focus();
 });
 
@@ -138,16 +153,19 @@ cancelBtn.addEventListener('click', () => {
 
 // CONFIRM SEND
 confirmSendBtn.addEventListener('click', async () => {
-    const comment = commentInput.value.trim() || "Ingen kommentar.";
+    const comment  = commentInput.value.trim() || 'Ingen kommentar.';
+    const severity = selectedSeverity || '⚪ Info';
+
     const payloadToSend = {
         log: validJsonData,
-        comment: comment,
+        comment,
+        severity,
         submittedAt: new Date().toISOString()
     };
 
     commentModal.style.display = 'none';
-    statusMessage.textContent = "⏳ Skickar...";
-    statusMessage.style.color = "#3b82f6";
+    statusMessage.textContent = '⏳ Skickar...';
+    statusMessage.style.color = '#3b82f6';
     preSendBtn.disabled = true;
 
     try {
@@ -162,22 +180,23 @@ confirmSendBtn.addEventListener('click', async () => {
             throw new Error(errData.error || 'Serverfel');
         }
 
-        statusMessage.textContent = "✅ Logg sparad!";
-        statusMessage.style.color = "#10b981";
+        statusMessage.textContent = '✅ Logg sparad!';
+        statusMessage.style.color = '#10b981';
 
-        lastComment.textContent = comment;
-        lastLogData.innerHTML = renderTimelineView(validJsonData);
+        lastSeverity.textContent = severity;
+        lastComment.textContent  = comment;
+        lastLogData.innerHTML    = renderTimelineView(validJsonData);
         lastSentCard.style.display = 'block';
 
-        // Reset form
+        // Reset
         logInput.value = '';
-        logPreview.innerHTML = "Väntar på giltig JSON...";
+        logPreview.innerHTML = 'Väntar på giltig JSON...';
         validJsonData = null;
-        setTimeout(() => { statusMessage.textContent = ""; }, 4000);
+        setTimeout(() => { statusMessage.textContent = ''; }, 4000);
 
     } catch (error) {
-        statusMessage.textContent = "❌ Fel: " + error.message;
-        statusMessage.style.color = "#ef4444";
+        statusMessage.textContent = '❌ Fel: ' + error.message;
+        statusMessage.style.color = '#ef4444';
         preSendBtn.disabled = false;
     }
 });

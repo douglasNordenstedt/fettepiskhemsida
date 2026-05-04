@@ -10,7 +10,6 @@
 <body>
     <nav class="navbar">
         <h2>🛡️ IR Data Ingestion</h2>
-        <!-- Temporary link to Google Sheets -->
         <a href="https://docs.google.com/spreadsheets/d/1mzZ7d1cUBALEIvgVhR3seKN6DUQpnpS03sV_8kr0zg8/edit?gid=0#gid=0" target="_blank" class="sheet-btn">
             📊 Öppna Google Kalkylark
         </a>
@@ -21,9 +20,9 @@
         <div class="card">
             <h1>Stoppa in din logg här</h1>
             <p>Klistra in rå JSON-logg nedan. En förhandsgranskning visas automatiskt.</p>
-            
+
             <textarea id="logInput" placeholder='{"timestamp": "2023-10-25T10:00:00Z", "event": "Login Failed"}'></textarea>
-            
+
             <!-- Live Preview Box -->
             <div class="preview-box">
                 <strong>Förhandsgranskning:</strong>
@@ -37,20 +36,35 @@
         <!-- Last Sent Log (Hidden by default) -->
         <div class="card" id="lastSentCard" style="display: none; margin-top: 20px; border-color: #10b981;">
             <h2 style="color: #10b981; margin-top: 0;">✅ Senast inskickade logg</h2>
-            <p><strong>Din kommentar:</strong> <span id="lastComment"></span></p>
+            <p>
+                <strong>Allvarlighetsgrad:</strong> <span id="lastSeverity"></span>
+                &nbsp;|&nbsp;
+                <strong>Kommentar:</strong> <span id="lastComment"></span>
+            </p>
             <pre id="lastLogData" style="background: #0f172a; padding: 10px; border-radius: 4px;"></pre>
         </div>
     </div>
 
-    <!-- Comment Modal (Hidden by default) -->
+    <!-- Comment + Severity Modal -->
     <div id="commentModal" class="modal">
         <div class="modal-content">
-            <h2>Lägg till en kommentar</h2>
-            <p>Ge kontext till loggen innan den skickas till kalkylarket.</p>
+            <h2>Klassificera och kommentera</h2>
+
+            <!-- Severity Picker -->
+            <p style="margin-bottom: 6px; color: #94a3b8; font-size: 0.9em;">Allvarlighetsgrad</p>
+            <div class="severity-picker">
+                <button class="sev-btn" data-sev="🔴 High"   style="--sev-color: #ef4444;">🔴 High</button>
+                <button class="sev-btn" data-sev="🟡 Medium" style="--sev-color: #f59e0b;">🟡 Medium</button>
+                <button class="sev-btn" data-sev="🔵 Low"    style="--sev-color: #3b82f6;">🔵 Low</button>
+                <button class="sev-btn" data-sev="⚪ Info"   style="--sev-color: #64748b;">⚪ Info</button>
+            </div>
+
+            <p style="margin: 16px 0 6px; color: #94a3b8; font-size: 0.9em;">Analytiker-kommentar</p>
             <input type="text" id="commentInput" placeholder="T.ex. Hittades på webbservern, misstänkt inloggning..." autocomplete="off">
+
             <div class="modal-actions">
                 <button id="cancelBtn" class="btn-secondary">Avbryt</button>
-                <button id="confirmSendBtn" class="btn-primary">Skicka Logg</button>
+                <button id="confirmSendBtn" class="btn-primary" disabled>Skicka Logg</button>
             </div>
         </div>
     </div>
