@@ -15,49 +15,64 @@ const lastSentCard = document.getElementById('lastSentCard');
 const lastComment = document.getElementById('lastComment');
 const lastLogData = document.getElementById('lastLogData');
 
-let validJsonData = null; // Stores parsed JSON when valid
+let validJsonData = null;
 
-// 1. LIVE PREVIEW: Listen to typing/pasting
+// NEW: Function to extract key fields and create a clean HTML view
+function renderTimelineView(data) {
+    const src = data._source || {};
+    const fields = [
+        { label: "Timestamp", value: src['@timestamp'] || "N/A" },
+        { label: "Hostname",  value: src.host?.hostname || "N/A" },
+        { label: "User",      value: src.user?.name || "N/A" },
+        { label: "Process",   value: src.process?.name || "N/A" },
+        { label: "Command",   value: src.process?.command_line || src.message || "N/A" },
+        { label: "Action",    value: src.event?.action || src.winlog?.task || "N/A" }
+    ];
+
+    // Build the HTML for the preview box
+    return fields.map(field => `
+        <div style="display: flex; border-bottom: 1px solid #334155; padding: 4px 0;">
+            <strong style="color: #94a3b8; width: 100px; flex-shrink: 0;">${field.label}</strong>
+            <span style="color: #f8fafc; font-family: 'Courier New', monospace; word-break: break-all;">${field.value}</span>
+        </div>
+    `).join('');
+}
+
+// LIVE PREVIEW
 logInput.addEventListener('input', () => {
     const rawData = logInput.value.trim();
-
     if (!rawData) {
-        logPreview.textContent = "Väntar på giltig JSON...";
-        logPreview.style.color = "#94a3b8"; // muted text
+        logPreview.innerHTML = "Väntar på giltig JSON...";
         preSendBtn.disabled = true;
         validJsonData = null;
         return;
     }
 
     try {
-        // Try to parse it to ensure it's real JSON
         validJsonData = JSON.parse(rawData);
-        
-        // Show pretty-printed JSON in the preview box
-        logPreview.textContent = JSON.stringify(validJsonData, null, 2);
-        logPreview.style.color = "#10b981"; // green text = good
-        preSendBtn.disabled = false; // Enable the send button
+        // Use the new render function for the preview
+        logPreview.innerHTML = renderTimelineView(validJsonData);
+        preSendBtn.disabled = false;
     } catch (e) {
-        logPreview.textContent = "❌ Ogiltigt JSON-format. Vänligen kontrollera syntaxen.";
-        logPreview.style.color = "#ef4444"; // red text = bad
+        logPreview.innerHTML = `<span style="color: #ef4444;">❌ Ogiltigt JSON-format.</span>`;
         preSendBtn.disabled = true;
         validJsonData = null;
     }
 });
 
-// 2. OPEN MODAL: When clicking "Granska och Skicka"
+// OPEN MODAL
 preSendBtn.addEventListener('click', () => {
     commentModal.style.display = 'flex';
-    commentInput.value = ''; // clear previous comment
+    commentInput.value = '';
     commentInput.focus();
 });
 
-// 3. CLOSE MODAL: When clicking "Avbryt"
+// CLOSE MODAL
 cancelBtn.addEventListener('click', () => {
     commentModal.style.display = 'none';
 });
 
-// 4. CONFIRM SEND: When hitting send inside the modal
+// CONFIRM SEND
 confirmSendBtn.addEventListener('click', async () => {
     const comment = commentInput.value.trim() || "Ingen kommentar.";
     const payloadToSend = {
@@ -67,12 +82,11 @@ confirmSendBtn.addEventListener('click', async () => {
     };
 
     commentModal.style.display = 'none';
-    statusMessage.textContent = "⏳ Skickar till kalkylblad...";
+    statusMessage.textContent = "⏳ Skickar...";
     statusMessage.style.color = "#3b82f6";
     preSendBtn.disabled = true;
 
     try {
-        // DETTA ÄR INTEGRATIONEN:
         const response = await fetch('/api/ingest', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -84,26 +98,23 @@ confirmSendBtn.addEventListener('click', async () => {
             throw new Error(errData.error || 'Serverfel');
         }
 
-        // On Success:
-        statusMessage.textContent = "✅ Logg sparad i Sheets!";
+        statusMessage.textContent = "✅ Logg sparad!";
         statusMessage.style.color = "#10b981";
 
         lastComment.textContent = comment;
-        lastLogData.textContent = JSON.stringify(validJsonData, null, 2);
+        // Use the new render function for the "Last Sent" box too
+        lastLogData.innerHTML = renderTimelineView(validJsonData);
         lastSentCard.style.display = 'block';
 
-        // Återställ formulär
+        // Reset form
         logInput.value = '';
-        logPreview.textContent = "Väntar på giltig JSON...";
-        logPreview.style.color = "#94a3b8";
+        logPreview.innerHTML = "Väntar på giltig JSON...";
         validJsonData = null;
-
         setTimeout(() => { statusMessage.textContent = ""; }, 4000);
 
     } catch (error) {
         statusMessage.textContent = "❌ Fel: " + error.message;
         statusMessage.style.color = "#ef4444";
         preSendBtn.disabled = false;
-        console.error('Fetch error:', error);
     }
 });

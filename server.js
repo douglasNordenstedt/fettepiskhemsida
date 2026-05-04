@@ -22,29 +22,66 @@ const auth = new google.auth.GoogleAuth({
 app.post('/api/ingest', async (req, res) => {
     try {
         const { log, comment, submittedAt } = req.body;
-        const client = await auth.getClient();
-        const sheets = google.sheets({ version: 'v4', auth: client });
+        const src = log._source || {};
 
-        // Raden som skapas i Sheets
-        const row = [
-            submittedAt,
-            comment,
-            JSON.stringify(log, null, 2)
+        const newRow = [
+            src['@timestamp'] || submittedAt,
+            src.host?.hostname || "N/A",
+            src.user?.name || "N/A",
+            src.process?.name || "N/A",
+            src.process?.command_line || src.message || "N/A",
+            src.event?.action || src.winlog?.task || "N/A",
+            comment
         ];
 
-        await sheets.spreadsheets.values.append({
-            spreadsheetId: SPREADSHEET_ID,
-            range: 'Blad1!A1',
-            valueInputOption: 'USER_ENTERED',
-            requestBody: { values: [row] },
+        const client = await auth.getClient();
+        const sheets = google.sheets({ version: 'v4', auth: client });
+        const spreadsheetId = SPREADSHEET_ID;
+
+        // 1. Hämta data och headers
+        const getRows = await sheets.spreadsheets.values.get({ spreadsheetId, range: 'Blad1' });
+        let allData = getRows.data.values || [];
+        const headers = allData.length > 0 ? allData.shift() : ['Timestamp', 'Hostname', 'User', 'Process', 'Command/Details', 'Action', 'Analyst Comment'];
+
+        // 2. Lägg till ny logg och sortera (Nyast längst upp)
+        allData.push(newRow);
+        allData.sort((a, b) => new Date(a[0]) - new Date(b[0]));
+
+        // 3. Skriv tillbaka allt
+        await sheets.spreadsheets.values.update({
+            spreadsheetId, range: 'Blad1!A1', valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [headers, ...allData] }
+        });
+
+        // 4. AUTOMATISK FORMATERING (Frys rad 1 + Textbrytning)
+        await sheets.spreadsheets.batchUpdate({
+            spreadsheetId,
+            requestBody: {
+                requests: [
+                    { // Frys första raden
+                        updateSheetProperties: {
+                            properties: { sheetId: 0, gridProperties: { frozenRowCount: 1 } },
+                            fields: 'gridProperties.frozenRowCount'
+                        }
+                    },
+                    { // Sätt Text Wrap = CLIP på hela arket
+                        repeatCell: {
+                            range: { sheetId: 0 },
+                            cell: { userEnteredFormat: { wrapStrategy: 'CLIP' } },
+                            fields: 'userEnteredFormat.wrapStrategy'
+                        }
+                    }
+                ]
+            }
         });
 
         res.status(200).json({ success: true });
     } catch (error) {
         console.error('❌ Sheets Error:', error);
-        res.status(500).json({ error: 'Kunde inte spara till kalkylbladet.' });
+        res.status(500).json({ error: 'Kunde inte spara.' });
     }
 });
+
 
 // Servera statiska filer
 app.use('/', express.static(path.join(__dirname, 'public')));

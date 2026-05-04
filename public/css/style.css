@@ -72,21 +72,37 @@ textarea {
 
 textarea:focus { outline: none; border-color: var(--primary); }
 
-.preview-box {
+/* Update your .preview-box and #lastLogData styles */
+.preview-box, #lastSentCard pre {
     background-color: #0f172a;
     border: 1px solid var(--border);
     border-radius: 4px;
     padding: 15px;
     margin-bottom: 20px;
+    max-height: 300px; /* Limits height */
+    overflow-y: auto;   /* Adds scrollbar if too long */
 }
 
-.preview-box pre {
-    margin: 10px 0 0 0;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    font-family: 'Courier New', Courier, monospace;
-    color: #cbd5e1;
+/* Style for the "Timeline" rows in the preview */
+.log-field {
+    display: flex;
+    border-bottom: 1px solid #334155;
+    padding: 5px 0;
+}
+
+.field-label {
+    color: var(--text-muted);
+    width: 120px;
+    font-weight: bold;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+}
+
+.field-value {
+    color: var(--success);
+    font-family: 'Courier New', monospace;
     font-size: 0.9rem;
+    word-break: break-all;
 }
 
 /* Buttons */
