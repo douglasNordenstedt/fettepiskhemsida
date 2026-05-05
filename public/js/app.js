@@ -58,7 +58,9 @@ function getEventDetails(src) {
             return src.file?.path || src.file?.name || 'N/A';
 
         case '12': // Registry Object Added/Deleted
+            return src.regitry?.path || src.registry?.key || 'N/A';
         case '13': // Registry Value Set
+            return src.regitry?.path || src.registry?.key || 'N/A';
         case '14': // Registry Key Renamed
             return src.registry?.path || src.registry?.key || 'N/A';
 
@@ -70,6 +72,7 @@ function getEventDetails(src) {
         }
 
         case '23': // File Delete
+            return src.file?.path || src.file?.name || 'N/A';
         case '26': // File Delete Logged
             return src.file?.path || 'N/A';
 
