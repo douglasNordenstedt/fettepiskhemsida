@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IR Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+
+    <!-- ── NAVBAR ── -->
+    <nav class="dash-nav">
+        <div class="dash-nav-left">
+            <a href="/" class="back-btn">← Ingestion</a>
+            <div class="dash-title">
+                <span class="dash-title-icon">⬡</span>
+                IR Dashboard
+            </div>
+        </div>
+        <div class="dash-nav-right">
+            <div class="sync-indicator" id="syncIndicator">
+                <span class="sync-dot"></span>
+                <span id="syncLabel">Synkroniserar...</span>
+            </div>
+            <button class="refresh-btn" id="refreshBtn" title="Uppdatera nu">↺</button>
+        </div>
+    </nav>
+
+    <!-- ── STAT CARDS ── -->
+    <div class="stats-bar">
+        <div class="stat-card" id="statTotal">
+            <div class="stat-label">Totalt</div>
+            <div class="stat-value" id="valTotal">—</div>
+            <div class="stat-sub">händelser</div>
+        </div>
+        <div class="stat-card stat-high" id="statHigh">
+            <div class="stat-label">🔴 High</div>
+            <div class="stat-value" id="valHigh">—</div>
+            <div class="stat-sub">kritiska</div>
+        </div>
+        <div class="stat-card stat-medium" id="statMedium">
+            <div class="stat-label">🟡 Medium</div>
+            <div class="stat-value" id="valMedium">—</div>
+            <div class="stat-sub">varningar</div>
+        </div>
+        <div class="stat-card" id="statHosts">
+            <div class="stat-label">Värdar</div>
+            <div class="stat-value" id="valHosts">—</div>
+            <div class="stat-sub">unika källvärdar</div>
+        </div>
+        <div class="stat-card" id="statAnalysts">
+            <div class="stat-label">Analytiker</div>
+            <div class="stat-value" id="valAnalysts">—</div>
+            <div class="stat-sub">aktiva</div>
+        </div>
+        <div class="stat-card" id="statLast">
+            <div class="stat-label">Senaste händelse</div>
+            <div class="stat-value stat-value-sm" id="valLast">—</div>
+            <div class="stat-sub" id="valLastRelative"></div>
+        </div>
+    </div>
+
+    <!-- ── FILTER BAR ── -->
+    <div class="filter-bar">
+        <input
+            type="text"
+            class="search-input"
+            id="searchInput"
+            placeholder="Sök händelser, värdar, användare, detaljer..."
+            autocomplete="off"
+        >
+        <div class="sev-filters" id="sevFilters">
+            <button class="sev-filter active" data-sev="all">Alla</button>
+            <button class="sev-filter" data-sev="high">🔴 High</button>
+            <button class="sev-filter" data-sev="medium">🟡 Medium</button>
+            <button class="sev-filter" data-sev="low">🔵 Low</button>
+            <button class="sev-filter" data-sev="info">⚪ Info</button>
+        </div>
+        <select class="filter-select" id="hostFilter">
+            <option value="">Alla värdar</option>
+        </select>
+        <select class="filter-select" id="userFilter">
+            <option value="">Alla användare</option>
+        </select>
+        <div class="result-count" id="resultCount"></div>
+    </div>
+
+    <!-- ── MAIN LAYOUT ── -->
+    <div class="main-layout">
+
+        <!-- ── TIMELINE COLUMN ── -->
+        <div class="timeline-column">
+            <div class="column-header">
+                <span class="column-title">Tidslinje</span>
+                <span class="column-subtitle" id="timelineRange"></span>
+            </div>
+
+            <!-- Loading state -->
+            <div class="loading-state" id="loadingState">
+                <div class="loading-spinner"></div>
+                <p>Hämtar händelser...</p>
+            </div>
+
+            <!-- Empty state -->
+            <div class="empty-state" id="emptyState" style="display:none;">
+                <div class="empty-icon">◎</div>
+                <p>Inga händelser matchar filtret.</p>
+            </div>
+
+            <!-- Timeline track -->
+            <div class="timeline-track" id="timelineTrack"></div>
+        </div>
+
+        <!-- ── SIDEBAR ── -->
+        <aside class="sidebar">
+
+            <!-- Compromised Hosts -->
+            <div class="sidebar-card">
+                <div class="sidebar-card-header">
+                    <span class="sidebar-card-title">Komprometterade värdar</span>
+                    <span class="sidebar-badge" id="hostCount">0</span>
+                </div>
+                <div class="host-list" id="hostList">
+                    <div class="sidebar-empty">Laddar...</div>
+                </div>
+            </div>
+
+            <!-- Event Type Breakdown -->
+            <div class="sidebar-card">
+                <div class="sidebar-card-header">
+                    <span class="sidebar-card-title">Händelsetyper</span>
+                </div>
+                <div class="event-type-list" id="eventTypeList">
+                    <div class="sidebar-empty">Laddar...</div>
+                </div>
+            </div>
+
+            <!-- Active Analysts -->
+            <div class="sidebar-card">
+                <div class="sidebar-card-header">
+                    <span class="sidebar-card-title">Analytiker</span>
+                </div>
+                <div class="analyst-list" id="analystList">
+                    <div class="sidebar-empty">Laddar...</div>
+                </div>
+            </div>
+
+        </aside>
+    </div>
+
+    <script src="js/dashboard.js"></script>
+</body>
+</html>

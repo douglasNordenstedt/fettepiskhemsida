@@ -226,6 +226,29 @@ app.post('/api/ingest', async (req, res) => {
     }
 });
 
+app.get('/api/timeline', async (req, res) => {
+    try {
+        const client = await auth.getClient();
+        const sheets = google.sheets({ version: 'v4', auth: client });
+ 
+        await ensureTabs(sheets);   // reuse existing helper — creates tabs if needed
+ 
+        const result = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: 'Timeline',      // everything in the Timeline sheet
+        });
+ 
+        const values = result.data.values || [];
+        // Strip the header row so the client only gets data rows
+        const rows = values.length > 1 ? values.slice(1) : [];
+ 
+        res.status(200).json({ rows });
+    } catch (error) {
+        console.error('❌ Timeline fetch error:', error);
+        res.status(500).json({ error: 'Kunde inte hämta timeline.' });
+    }
+});
+
 app.use('/', express.static(path.join(__dirname, 'public')));
 
 const certPath = path.join(__dirname, 'server.cert');
