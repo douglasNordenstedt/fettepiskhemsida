@@ -110,6 +110,12 @@ function getEventDetails(src) {
 
         case '7':  // Image/DLL Loaded
             return src.file?.path || src.dll?.path || 'N/A';
+        case '8': // Create Remote Thread
+            return `${src.winlog?.event_data?.SourceImage} → ${src.winlog?.event_data?.TargetImage} (pid: ${src.winlog?.event_data?.TargetProcessId})`;
+        case '10': // Process Access
+            const sourceImage = src.winlog?.event_data?.SourceImage || 'N/A';
+            const targetImage = src.winlog?.event_data?.TargetImage || 'N/A';
+            return `${sourceImage} → ${targetImage}`;
 
         case '11': // File Created
             return src.file?.path || src.file?.name || 'N/A';
