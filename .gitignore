@@ -3,3 +3,4 @@ server.key
 server.cert
 innovationsdagar-03b7b9f6f6ac.json
 google-key.json
+.env

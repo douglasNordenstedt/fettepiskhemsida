@@ -9,8 +9,9 @@ const app  = express();
 const port = process.env.PORT || 3000;
 
 app.use(express.json());
-
-const SPREADSHEET_ID = '1mzZ7d1cUBALEIvgVhR3seKN6DUQpnpS03sV_8kr0zg8';
+require('dotenv').config();
+// Replace SPREADSHEET_ID hardcode:
+const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
 const auth = new google.auth.GoogleAuth({
     keyFile: path.join(__dirname, 'google-key.json'),
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
@@ -163,10 +164,18 @@ async function writeToTab(sheets, tabName, newRow) {
 // ─────────────────────────────────────────────
 app.post('/api/ingest', async (req, res) => {
     try {
-        const { log, comment, severity, submittedAt } = req.body;
+        // ↓ analystName added to destructure — only change in this function
+        const { log, comment, severity, submittedAt, analystName } = req.body;
         const src    = log._source || {};
         const logId  = log._id || 'N/A';
         const sev    = severity || '⚪ Info';
+
+        // Prepend analyst name to comment so it shows in the sheet
+        // Format: "[Marcus] This looks suspicious"
+        // Falls back gracefully if analystName is missing (old clients, direct API calls)
+        const analystComment = analystName
+            ? `[${analystName}] ${comment}`
+            : comment;
 
         const user      = src.user?.domain
                             ? `${src.user.domain}\\${src.user.name}`
@@ -199,7 +208,7 @@ app.post('/api/ingest', async (req, res) => {
             agentInfo,
             osInfo,
             getEventDetails(src),
-            comment
+            analystComment   // ← was: comment
         ];
 
         const client = await auth.getClient();

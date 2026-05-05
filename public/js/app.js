@@ -20,6 +20,63 @@ let validJsonData   = null;
 let selectedSeverity = null;
 
 // ─────────────────────────────────────────────
+// ANALYST USERNAME  (localStorage — Option C)
+// Name is stored locally, appended to every log.
+// No backend auth required.
+// ─────────────────────────────────────────────
+const ANALYST_KEY      = 'ir_analyst_name';
+const navbarAnalyst    = document.getElementById('navbarAnalyst');
+const changeNameBtn    = document.getElementById('changeNameBtn');
+const usernameModal    = document.getElementById('usernameModal');
+const usernameInput    = document.getElementById('usernameInput');
+const confirmUsernameBtn = document.getElementById('confirmUsernameBtn');
+
+function getAnalystName() {
+    return localStorage.getItem(ANALYST_KEY) || 'Okänd';
+}
+
+function applyAnalystName(name) {
+    localStorage.setItem(ANALYST_KEY, name);
+    navbarAnalyst.textContent = name;
+}
+
+function openUsernameModal() {
+    // Pre-fill with existing name so it's easy to correct
+    usernameInput.value = localStorage.getItem(ANALYST_KEY) || '';
+    confirmUsernameBtn.disabled = usernameInput.value.trim().length < 2;
+    usernameModal.style.display = 'flex';
+    usernameInput.focus();
+}
+
+// Check on load — show modal if no name saved yet
+const storedName = localStorage.getItem(ANALYST_KEY);
+if (storedName) {
+    navbarAnalyst.textContent = storedName;
+} else {
+    openUsernameModal();
+}
+
+// Enable confirm button only when at least 2 chars typed
+usernameInput.addEventListener('input', () => {
+    confirmUsernameBtn.disabled = usernameInput.value.trim().length < 2;
+});
+
+// Allow Enter key to confirm
+usernameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !confirmUsernameBtn.disabled) confirmUsernameBtn.click();
+});
+
+confirmUsernameBtn.addEventListener('click', () => {
+    const name = usernameInput.value.trim();
+    if (name.length < 2) return;
+    applyAnalystName(name);
+    usernameModal.style.display = 'none';
+});
+
+// ✏️ button in navbar — lets analyst change name anytime
+changeNameBtn.addEventListener('click', openUsernameModal);
+
+// ─────────────────────────────────────────────
 // SEVERITY PICKER
 // ─────────────────────────────────────────────
 document.querySelectorAll('.sev-btn').forEach(btn => {
@@ -176,13 +233,15 @@ cancelBtn.addEventListener('click', () => {
 
 // CONFIRM SEND
 confirmSendBtn.addEventListener('click', async () => {
-    const comment  = commentInput.value.trim() || 'Ingen kommentar.';
-    const severity = selectedSeverity || '⚪ Info';
+    const comment     = commentInput.value.trim() || 'Ingen kommentar.';
+    const severity    = selectedSeverity || '⚪ Info';
+    const analystName = getAnalystName(); // ← added: pull name from localStorage
 
     const payloadToSend = {
         log: validJsonData,
         comment,
         severity,
+        analystName,                     // ← added: sent to server
         submittedAt: new Date().toISOString()
     };
 

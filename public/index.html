@@ -10,6 +10,14 @@
 <body>
     <nav class="navbar">
         <h2>🛡️ IR Data Ingestion</h2>
+
+        <!-- Analyst identity badge (populated by app.js from localStorage) -->
+        <div class="analyst-badge">
+            <span class="analyst-label">Analytiker:</span>
+            <span id="navbarAnalyst">–</span>
+            <button id="changeNameBtn" class="change-name-btn" title="Byt namn">✏️</button>
+        </div>
+
         <a href="https://docs.google.com/spreadsheets/d/1mzZ7d1cUBALEIvgVhR3seKN6DUQpnpS03sV_8kr0zg8/edit?gid=0#gid=0" target="_blank" class="sheet-btn">
             📊 Öppna Google Kalkylark
         </a>
@@ -65,6 +73,29 @@
             <div class="modal-actions">
                 <button id="cancelBtn" class="btn-secondary">Avbryt</button>
                 <button id="confirmSendBtn" class="btn-primary" disabled>Skicka Logg</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Username Modal (shown on first visit, or when clicking ✏️) ── -->
+    <div id="usernameModal" class="modal">
+        <div class="modal-content">
+            <h2>👤 Vem är du?</h2>
+            <p style="color: #94a3b8; font-size: 0.9em; margin-top: 0;">
+                Ditt namn sparas lokalt och läggs till på alla loggar du skickar in.
+            </p>
+
+            <p style="margin: 16px 0 6px; color: #94a3b8; font-size: 0.9em;">Analytiker-namn</p>
+            <input
+                type="text"
+                id="usernameInput"
+                placeholder="T.ex. Marcus, Alice, SOC-Analyst-2..."
+                autocomplete="off"
+                maxlength="40"
+            >
+
+            <div class="modal-actions" style="justify-content: flex-end;">
+                <button id="confirmUsernameBtn" class="btn-primary" disabled>Spara och fortsätt →</button>
             </div>
         </div>
     </div>
