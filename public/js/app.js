@@ -94,14 +94,33 @@ function renderTimelineView(data) {
                         ? `${src.user.domain}\\${src.user.name}`
                         : (src.user?.name || 'N/A');
 
+    // Destination host: extracted from DNS query target or network destination
+    const destHost  = src.dns?.question?.name
+                        || src.destination?.address
+                        || src.url?.domain
+                        || 'N/A';
+
+    // Host OS: build a readable string from os fields
+    const osInfo    = src.host?.os?.name
+                        ? `${src.host.os.name} ${src.host.os.version || ''}${src.host.os.build ? ` (Build ${src.host.os.build})` : ''}`.trim()
+                        : 'N/A';
+
+    // Agent / Log source
+    const agentInfo = src.agent?.type && src.agent?.name
+                        ? `${src.agent.type} — ${src.agent.name}`
+                        : (src.agent?.name || src.agent?.type || 'N/A');
+
     const commonFields = [
-        { label: 'Log ID',    value: data._id || 'N/A',                                                color: '#e2e8f0' },
-        { label: 'Timestamp', value: src['@timestamp'] || 'N/A',                           color: '#7dd3fc' },
-        { label: 'Hostname',  value: src.host?.hostname || 'N/A',                          color: '#f8fafc' },
-        { label: 'User',      value: user,                                                  color: '#f8fafc' },
-        { label: 'Event ID',  value: `${eventId} — ${eventType}`,                          color: '#fde68a' },
-        { label: 'Process',   value: src.process?.executable || src.process?.name || 'N/A', color: '#f8fafc' },
-        { label: 'Details',   value: getEventDetails(src),                                  color: '#6ee7b7' },
+        { label: 'Log ID',        value: data._id || 'N/A',                                                  color: '#e2e8f0' },
+        { label: 'Timestamp',     value: src['@timestamp'] || 'N/A',                                         color: '#7dd3fc' },
+        { label: 'Source Host',   value: src.host?.hostname || 'N/A',                                        color: '#f8fafc' },
+        { label: 'Dest Host',     value: destHost,                                                            color: '#f8fafc' },
+        { label: 'User',          value: user,                                                                color: '#f8fafc' },
+        { label: 'Event ID',      value: `${eventId} — ${eventType}`,                                        color: '#fde68a' },
+        { label: 'Process',       value: src.process?.executable || src.process?.name || 'N/A',              color: '#f8fafc' },
+        { label: 'Log Source',    value: agentInfo,                                                           color: '#c4b5fd' },
+        { label: 'Host OS',       value: osInfo,                                                              color: '#fdba74' },
+        { label: 'Details',       value: getEventDetails(src),                                                color: '#6ee7b7' },
     ];
 
     return commonFields.map(f => `
