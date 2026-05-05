@@ -9,9 +9,9 @@ const app  = express();
 const port = process.env.PORT || 3000;
 
 app.use(express.json());
-require('dotenv').config();
-// Replace SPREADSHEET_ID hardcode:
-const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
+
+const SPREADSHEET_ID = '1mzZ7d1cUBALEIvgVhR3seKN6DUQpnpS03sV_8kr0zg8';
+
 const auth = new google.auth.GoogleAuth({
     keyFile: path.join(__dirname, 'google-key.json'),
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
