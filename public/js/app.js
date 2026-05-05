@@ -138,7 +138,14 @@ function getEventDetails(src) {
             return src.file?.path || src.file?.name || 'N/A';
         case '26': // File Delete Logged
             return src.file?.path || 'N/A';
-
+        case '4624': // Successful Logon
+            const logonType = src.winlog?.event_data?.LogonType || 'N/A';
+            const channel = src.winlog?.channel || 'N/A';
+            const outcome = src.event?.outcome || 'N/A';
+            return `logontype: ${logonType}, channel: ${channel}, outcome: ${outcome}`;
+        case '4720': //User account creation
+            const userName = src.winlog?.event_data?.TargetUserName || 'N/A';
+            return `user account ${userName} was created`
         default:
             return src.process?.command_line
                 || src.registry?.path
