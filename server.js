@@ -23,7 +23,7 @@ const auth = new google.auth.GoogleAuth({
 // Add new tabs here in the future.
 // ─────────────────────────────────────────────
 const TABS = {
-    Timeline: ['Severity', 'Log ID', 'Timestamp', 'Source Hostname', 'Dest Hostname', 'User', 'Event', 'Process', 'Log Source', 'Host OS', 'Details', 'Analyst Comment'],
+    Timeline: ['Severity', 'Log ID', 'Timestamp', 'Source Hostname', 'Dest Hostname', 'User', 'Event', 'Process', 'Log Source', 'Host OS', 'Details', 'Submited At', 'Analyst Comment'],
     NBI:      ['Severity', 'Log ID', 'Timestamp', 'Src IP', 'Src Port', 'Dst IP', 'Dst Port', 'Protocol', 'Domain/URL', 'User Agent', 'Rule/Alert', 'Analyst Comment'],
     HBI:      ['Severity', 'Log ID', 'Timestamp', 'Hostname', 'User', 'Process', 'Process Path', 'PID', 'File Path', 'File Hash', 'Registry Key', 'Rule/Detection', 'Analyst Comment'],
 };
@@ -182,7 +182,7 @@ app.post('/api/ingest', async (req, res) => {
                             : (src.user?.name || 'N/A');
         const eventId   = src.winlog?.event_id || src.event?.code || '?';
         const eventType = src.event?.action || src.winlog?.task || 'N/A';
-        const ts        = src['@timestamp'] || submittedAt;
+        const ts        = src['@timestamp'] || 'N/A';
         const destHost  = src.dns?.question?.name
                             || src.destination?.address
                             || src.url?.domain
@@ -196,6 +196,7 @@ app.post('/api/ingest', async (req, res) => {
                             ? `${src.agent.type} — ${src.agent.name}`
                             : (src.agent?.name || src.agent?.type || 'N/A');
 
+
         const timelineRow = [
             sev,
             logId,
@@ -208,6 +209,7 @@ app.post('/api/ingest', async (req, res) => {
             agentInfo,
             osInfo,
             getEventDetails(src),
+            submittedAt,
             analystComment   // ← was: comment
         ];
 
