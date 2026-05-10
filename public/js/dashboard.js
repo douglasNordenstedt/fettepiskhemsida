@@ -1,10 +1,9 @@
 // ─────────────────────────────────────────────
-// IR Dashboard — dashboard.js
-// Fetches /api/timeline, renders everything.
-// Zero dependency on app.js / style.css.
+// IR Dashboard — dashboard.js  v3
+// Multi-select checkbox filters, all sidebar panels
+// clickable, date range, scrollable sidebar panels.
 // ─────────────────────────────────────────────
 
-// Sheet column indices (must match server.js TABS.Timeline header)
 const COL = {
     SEVERITY:   0,
     LOG_ID:     1,
@@ -21,45 +20,56 @@ const COL = {
     COMMENT:    12,
 };
 
-// ── State ──────────────────────────────────────
-let allEvents       = [];   // raw rows from API (excluding header)
-let filteredEvents  = [];
-let activeHostFilter = '';
-let activeSevFilter  = 'all';
-let searchQuery      = '';
-let refreshTimer     = null;
-let isLoading        = false;
+// ── Filter state — all multi-select Sets ───────
+const activeFilters = {
+    severity:   new Set(),
+    eventType:  new Set(),
+    srcHost:    new Set(),
+    user:       new Set(),
+    logSource:  new Set(),
+};
+let searchQuery  = '';
+let dateFrom     = null;
+let dateTo       = null;
 
-// ── DOM refs ────────────────────────────────────
-const timelineTrack  = document.getElementById('timelineTrack');
-const loadingState   = document.getElementById('loadingState');
-const emptyState     = document.getElementById('emptyState');
-const resultCount    = document.getElementById('resultCount');
-const timelineRange  = document.getElementById('timelineRange');
-const syncIndicator  = document.getElementById('syncIndicator');
-const syncDot        = syncIndicator.querySelector('.sync-dot');
-const syncLabel      = document.getElementById('syncLabel');
-const refreshBtn     = document.getElementById('refreshBtn');
-const searchInput    = document.getElementById('searchInput');
-const hostFilter     = document.getElementById('hostFilter');
-const userFilter     = document.getElementById('userFilter');
+// ── Data state ─────────────────────────────────
+let allEvents       = [];
+let filteredEvents  = [];
+let refreshTimer    = null;
+let isLoading       = false;
+let filterPanelOpen = false;
+
+// ── DOM ─────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+const timelineTrack   = $('timelineTrack');
+const loadingState    = $('loadingState');
+const emptyState      = $('emptyState');
+const resultCount     = $('resultCount');
+const timelineRange   = $('timelineRange');
+const syncDot         = $('syncIndicator').querySelector('.sync-dot');
+const syncLabel       = $('syncLabel');
+const refreshBtn      = $('refreshBtn');
+const searchInput     = $('searchInput');
+const dateFromEl      = $('dateFrom');
+const dateToEl        = $('dateTo');
+const dateClearBtn    = $('dateClearBtn');
+const filterToggleBtn = $('filterToggleBtn');
+const filterPanel     = $('filterPanel');
+const filterBadge     = $('filterBadge');
+const filterClearAll  = $('filterClearAll');
+const toast           = $('toast');
 
 // Stats
-const valTotal    = document.getElementById('valTotal');
-const valHigh     = document.getElementById('valHigh');
-const valMedium   = document.getElementById('valMedium');
-const valHosts    = document.getElementById('valHosts');
-const valAnalysts = document.getElementById('valAnalysts');
-const valLast     = document.getElementById('valLast');
-const valLastRel  = document.getElementById('valLastRelative');
+const valTotal   = $('valTotal');
+const valHigh    = $('valHigh');
+const valMedium  = $('valMedium');
+const valHosts   = $('valHosts');
+const valAnalysts= $('valAnalysts');
+const valLast    = $('valLast');
+const valLastRel = $('valLastRelative');
 
-// Sidebar
-const hostList      = document.getElementById('hostList');
-const hostCount     = document.getElementById('hostCount');
-const eventTypeList = document.getElementById('eventTypeList');
-const analystList   = document.getElementById('analystList');
-
-// ── Helpers ─────────────────────────────────────
+// ── Helpers ──────────────────────────────────────
 function sevKey(raw = '') {
     const s = raw.toLowerCase();
     if (s.includes('high'))   return 'high';
@@ -70,10 +80,8 @@ function sevKey(raw = '') {
 
 function fmtTs(ts) {
     if (!ts || ts === 'N/A') return '—';
-    try {
-        const d = new Date(ts);
-        return d.toLocaleString('sv-SE', { dateStyle: 'short', timeStyle: 'medium' });
-    } catch { return ts; }
+    try { return new Date(ts).toLocaleString('sv-SE', { dateStyle: 'short', timeStyle: 'medium' }); }
+    catch { return ts; }
 }
 
 function relativeTime(ts) {
@@ -81,10 +89,10 @@ function relativeTime(ts) {
     try {
         const diff = Date.now() - new Date(ts).getTime();
         const mins = Math.floor(diff / 60000);
-        if (mins < 2)   return 'just nu';
-        if (mins < 60)  return `${mins} min sedan`;
+        if (mins < 2)  return 'just nu';
+        if (mins < 60) return `${mins} min sedan`;
         const hrs = Math.floor(mins / 60);
-        if (hrs < 24)   return `${hrs} tim sedan`;
+        if (hrs < 24)  return `${hrs} tim sedan`;
         return `${Math.floor(hrs / 24)} dag(ar) sedan`;
     } catch { return ''; }
 }
@@ -94,44 +102,51 @@ function parseAnalyst(comment = '') {
     return m ? { analyst: m[1], text: m[2] } : { analyst: '—', text: comment };
 }
 
-function escHtml(s = '') {
+function esc(s = '') {
     return String(s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-// Extract event-id number from strings like "1 — Process Create"
-function eventIdFromCell(cell = '') {
-    const m = String(cell).match(/^(\d+)/);
-    return m ? m[1] : cell;
-}
-
-function eventLabelShort(cell = '') {
-    // "1 — Process Create"  →  "Process Create"
+function eventLabel(cell = '') {
+    // "1 — Process Create" → "Process Create"
     const parts = String(cell).split('—');
     return parts.length > 1 ? parts.slice(1).join('—').trim() : cell;
+}
+
+function showToast(msg, ms = 1800) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => toast.classList.remove('show'), ms);
+}
+
+function totalActiveFilters() {
+    return Object.values(activeFilters).reduce((n, s) => n + s.size, 0);
+}
+
+function updateFilterBadge() {
+    const n = totalActiveFilters();
+    filterBadge.textContent = n;
+    filterBadge.style.display = n ? 'inline-flex' : 'none';
+    filterToggleBtn.classList.toggle('active', n > 0 || filterPanelOpen);
 }
 
 // ── Fetch ────────────────────────────────────────
 async function fetchTimeline() {
     if (isLoading) return;
     isLoading = true;
-
     setSyncState('loading');
     refreshBtn.classList.add('spinning');
-
     try {
         const res  = await fetch('/api/timeline');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();          // { rows: [[...], ...] }
+        const data = await res.json();
         allEvents  = data.rows || [];
-
-        buildDropdowns();
-        applyFilters();
         renderStats();
+        rebuildFilterPanel();
         renderSidebar();
+        applyFilters();
         setSyncState('live');
     } catch (err) {
         console.error('Dashboard fetch error:', err);
@@ -145,15 +160,9 @@ async function fetchTimeline() {
 
 function setSyncState(state) {
     syncDot.className = 'sync-dot';
-    if (state === 'live') {
-        syncDot.classList.add('live');
-        syncLabel.textContent = 'Live';
-    } else if (state === 'loading') {
-        syncLabel.textContent = 'Synkroniserar...';
-    } else {
-        syncDot.classList.add('error');
-        syncLabel.textContent = 'Fel – kontrollera anslutning';
-    }
+    if (state === 'live')    { syncDot.classList.add('live');  syncLabel.textContent = 'Live'; }
+    else if (state === 'loading') { syncLabel.textContent = 'Synkroniserar...'; }
+    else { syncDot.classList.add('error'); syncLabel.textContent = 'Fel – kontrollera anslutning'; }
 }
 
 function scheduleRefresh() {
@@ -161,61 +170,11 @@ function scheduleRefresh() {
     refreshTimer = setTimeout(fetchTimeline, 60_000);
 }
 
-// ── Dropdowns ────────────────────────────────────
-function buildDropdowns() {
-    const hosts = [...new Set(allEvents.map(r => r[COL.SRC_HOST]).filter(h => h && h !== 'N/A'))].sort();
-    const users = [...new Set(allEvents.map(r => r[COL.USER]).filter(u => u && u !== 'N/A'))].sort();
-
-    const prevHost = hostFilter.value;
-    const prevUser = userFilter.value;
-
-    hostFilter.innerHTML = '<option value="">Alla värdar</option>' +
-        hosts.map(h => `<option value="${escHtml(h)}">${escHtml(h)}</option>`).join('');
-    userFilter.innerHTML = '<option value="">Alla användare</option>' +
-        users.map(u => `<option value="${escHtml(u)}">${escHtml(u)}</option>`).join('');
-
-    if (prevHost) hostFilter.value = prevHost;
-    if (prevUser) userFilter.value = prevUser;
-}
-
-// ── Filter ────────────────────────────────────────
-function applyFilters() {
-    const q     = searchQuery.toLowerCase();
-    const sev   = activeSevFilter;
-    const host  = hostFilter.value;
-    const user  = userFilter.value;
-
-    filteredEvents = allEvents.filter(row => {
-        // Severity filter
-        if (sev !== 'all' && sevKey(row[COL.SEVERITY]) !== sev) return false;
-        // Host sidebar filter
-        if (activeHostFilter && row[COL.SRC_HOST] !== activeHostFilter) return false;
-        // Dropdown filters
-        if (host && row[COL.SRC_HOST] !== host) return false;
-        if (user && row[COL.USER] !== user) return false;
-        // Text search
-        if (q) {
-            const haystack = [
-                row[COL.EVENT], row[COL.SRC_HOST], row[COL.DST_HOST],
-                row[COL.USER],  row[COL.DETAILS],  row[COL.COMMENT],
-                row[COL.PROCESS]
-            ].join(' ').toLowerCase();
-            if (!haystack.includes(q)) return false;
-        }
-        return true;
-    });
-
-    renderTimeline();
-    resultCount.textContent = `${filteredEvents.length} / ${allEvents.length} händelser`;
-}
-
 // ── Stats ─────────────────────────────────────────
 function renderStats() {
-    const high   = allEvents.filter(r => sevKey(r[COL.SEVERITY]) === 'high').length;
-    const medium = allEvents.filter(r => sevKey(r[COL.SEVERITY]) === 'medium').length;
-    const hosts  = new Set(allEvents.map(r => r[COL.SRC_HOST]).filter(h => h && h !== 'N/A')).size;
-
-    // Count distinct analysts from comment fields
+    const high     = allEvents.filter(r => sevKey(r[COL.SEVERITY]) === 'high').length;
+    const medium   = allEvents.filter(r => sevKey(r[COL.SEVERITY]) === 'medium').length;
+    const hosts    = new Set(allEvents.map(r => r[COL.SRC_HOST]).filter(h => h && h !== 'N/A')).size;
     const analysts = new Set(
         allEvents.map(r => parseAnalyst(r[COL.COMMENT]).analyst).filter(a => a !== '—')
     ).size;
@@ -226,245 +185,413 @@ function renderStats() {
     valHosts.textContent    = hosts;
     valAnalysts.textContent = analysts || '—';
 
-    // Latest event by timestamp
-    const timestamps = allEvents
-        .map(r => r[COL.TIMESTAMP])
-        .filter(t => t && t !== 'N/A')
-        .map(t => new Date(t))
-        .filter(d => !isNaN(d));
+    const tss = allEvents.map(r => r[COL.TIMESTAMP]).filter(t => t && t !== 'N/A')
+        .map(t => new Date(t)).filter(d => !isNaN(d));
 
-    if (timestamps.length) {
-        const latest = new Date(Math.max(...timestamps));
-        valLast.textContent  = fmtTs(latest.toISOString());
+    if (tss.length) {
+        const latest   = new Date(Math.max(...tss));
+        const earliest = new Date(Math.min(...tss));
+        valLast.textContent    = fmtTs(latest.toISOString());
         valLastRel.textContent = relativeTime(latest.toISOString());
-    } else {
-        valLast.textContent  = '—';
-        valLastRel.textContent = '';
-    }
-
-    // Timeline range label
-    if (timestamps.length > 1) {
-        const earliest = new Date(Math.min(...timestamps));
-        const latest   = new Date(Math.max(...timestamps));
-        timelineRange.textContent = `${fmtTs(earliest.toISOString())} → ${fmtTs(latest.toISOString())}`;
+        if (tss.length > 1)
+            timelineRange.textContent = `${fmtTs(earliest.toISOString())} → ${fmtTs(latest.toISOString())}`;
     }
 }
+
+// ── Filter Panel ──────────────────────────────────
+
+// Map filter key → { colIndex, labelFn, colorFn }
+const FILTER_DEFS = [
+    {
+        key: 'severity', elId: 'fciSeverity',
+        values: () => {
+            const map = {};
+            allEvents.forEach(r => {
+                const v = r[COL.SEVERITY] || '⚪ Info';
+                map[v] = (map[v] || 0) + 1;
+            });
+            // Fixed order
+            return ['🔴 High','🟡 Medium','🔵 Low','⚪ Info']
+                .filter(k => map[k])
+                .map(k => ({ value: k, count: map[k] }));
+        },
+        dotColor: v => {
+            const k = sevKey(v);
+            return k === 'high' ? '#ef4444' : k === 'medium' ? '#f59e0b' : k === 'low' ? '#3b82f6' : '#475569';
+        }
+    },
+    {
+        key: 'eventType', elId: 'fciEventType',
+        values: () => {
+            const map = {};
+            allEvents.forEach(r => {
+                const v = eventLabel(r[COL.EVENT]) || 'Okänd';
+                map[v] = (map[v] || 0) + 1;
+            });
+            return Object.entries(map).sort((a,b)=>b[1]-a[1]).map(([value,count])=>({value,count}));
+        },
+    },
+    {
+        key: 'srcHost', elId: 'fciHost',
+        values: () => {
+            const map = {};
+            allEvents.forEach(r => {
+                const v = r[COL.SRC_HOST];
+                if (v && v !== 'N/A') map[v] = (map[v] || 0) + 1;
+            });
+            return Object.entries(map).sort((a,b)=>b[1]-a[1]).map(([value,count])=>({value,count}));
+        },
+    },
+    {
+        key: 'user', elId: 'fciUser',
+        values: () => {
+            const map = {};
+            allEvents.forEach(r => {
+                const v = r[COL.USER];
+                if (v && v !== 'N/A') map[v] = (map[v] || 0) + 1;
+            });
+            return Object.entries(map).sort((a,b)=>b[1]-a[1]).map(([value,count])=>({value,count}));
+        },
+    },
+    {
+        key: 'logSource', elId: 'fciLogSource',
+        values: () => {
+            const map = {};
+            allEvents.forEach(r => {
+                const v = r[COL.LOG_SOURCE];
+                if (v && v !== 'N/A') map[v] = (map[v] || 0) + 1;
+            });
+            return Object.entries(map).sort((a,b)=>b[1]-a[1]).map(([value,count])=>({value,count}));
+        },
+    },
+];
+
+function rebuildFilterPanel() {
+    FILTER_DEFS.forEach(def => {
+        const container = $(def.elId);
+        if (!container) return;
+        const items = def.values();
+        if (!items.length) { container.innerHTML = '<div style="padding:6px 0;font-size:0.7rem;color:var(--muted)">—</div>'; return; }
+
+        container.innerHTML = items.map(({ value, count }) => {
+            const checked = activeFilters[def.key].has(value);
+            const dot     = def.dotColor ? `<span class="fci-sev-dot" style="background:${def.dotColor(value)}"></span>` : '';
+            const short   = value.length > 22 ? value.slice(0, 21) + '…' : value;
+            return `
+                <div class="fci-row ${checked ? 'checked' : ''}"
+                     data-key="${esc(def.key)}" data-val="${esc(value)}"
+                     onclick="toggleFilterItem('${esc(def.key)}','${esc(value)}',this)">
+                    <span class="fci-cb">${checked ? '✓' : ''}</span>
+                    ${dot}
+                    <span class="fci-label" title="${esc(value)}">${esc(short)}</span>
+                    <span class="fci-count">${count}</span>
+                </div>`;
+        }).join('');
+    });
+}
+
+window.toggleFilterItem = function(key, value, el) {
+    const set = activeFilters[key];
+    if (set.has(value)) { set.delete(value); el.classList.remove('checked'); el.querySelector('.fci-cb').textContent = ''; }
+    else                { set.add(value);    el.classList.add('checked');    el.querySelector('.fci-cb').textContent = '✓'; }
+    updateFilterBadge();
+    applyFilters();
+    renderSidebar();   // re-highlight sidebar items
+};
 
 // ── Sidebar ───────────────────────────────────────
 function renderSidebar() {
     renderHostPanel();
-    renderEventTypes();
-    renderAnalysts();
+    renderEventTypePanel();
+    renderAnalystPanel();
+    renderLogSourcePanel();
 }
 
 function renderHostPanel() {
-    // Group events by host, find max severity per host
+    const el = $('hostList');
+    const hostCount = $('hostCount');
     const map = {};
-    allEvents.forEach(row => {
-        const h = row[COL.SRC_HOST];
+    allEvents.forEach(r => {
+        const h = r[COL.SRC_HOST];
         if (!h || h === 'N/A') return;
         if (!map[h]) map[h] = { count: 0, maxSev: 'info' };
         map[h].count++;
-        const s = sevKey(row[COL.SEVERITY]);
-        const order = { high: 3, medium: 2, low: 1, info: 0 };
-        if (order[s] > order[map[h].maxSev]) map[h].maxSev = s;
+        const s = sevKey(r[COL.SEVERITY]);
+        const ord = { high:3, medium:2, low:1, info:0 };
+        if (ord[s] > ord[map[h].maxSev]) map[h].maxSev = s;
     });
-
-    const sorted = Object.entries(map).sort((a, b) => {
-        const order = { high: 3, medium: 2, low: 1, info: 0 };
-        return order[b[1].maxSev] - order[a[1].maxSev] || b[1].count - a[1].count;
+    const sorted = Object.entries(map).sort((a,b) => {
+        const ord = { high:3, medium:2, low:1, info:0 };
+        return ord[b[1].maxSev] - ord[a[1].maxSev] || b[1].count - a[1].count;
     });
-
     hostCount.textContent = sorted.length;
-
-    if (!sorted.length) {
-        hostList.innerHTML = '<div class="sidebar-empty">Inga värdar ännu.</div>';
-        return;
-    }
-
-    hostList.innerHTML = sorted.map(([name, info]) => `
-        <div class="host-item ${activeHostFilter === name ? 'active-filter' : ''}"
-             data-host="${escHtml(name)}" onclick="toggleHostFilter('${escHtml(name)}')">
-            <span class="host-dot ${info.maxSev}"></span>
-            <span class="host-name" title="${escHtml(name)}">${escHtml(name)}</span>
-            <span class="host-count">${info.count}</span>
-        </div>
-    `).join('');
+    if (!sorted.length) { el.innerHTML = '<div class="sidebar-empty">Inga värdar.</div>'; return; }
+    el.innerHTML = sorted.map(([name, info]) => `
+        <div class="sidebar-row ${activeFilters.srcHost.has(name) ? 'active-filter' : ''}"
+             onclick="toggleSidebarFilter('srcHost','${esc(name)}')" title="${esc(name)}">
+            <span class="sidebar-row-dot ${info.maxSev}"></span>
+            <span class="sidebar-row-name">${esc(name)}</span>
+            <span class="sidebar-row-count">${info.count}</span>
+        </div>`).join('');
 }
 
-function renderEventTypes() {
+function renderEventTypePanel() {
+    const el = $('eventTypeList');
     const map = {};
-    allEvents.forEach(row => {
-        const label = eventLabelShort(row[COL.EVENT]) || 'Okänd';
-        map[label] = (map[label] || 0) + 1;
+    allEvents.forEach(r => {
+        const v = eventLabel(r[COL.EVENT]) || 'Okänd';
+        map[v] = (map[v] || 0) + 1;
     });
-
-    const sorted = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 12);
-    const max    = sorted[0]?.[1] || 1;
-
-    if (!sorted.length) {
-        eventTypeList.innerHTML = '<div class="sidebar-empty">Inga händelsetyper ännu.</div>';
-        return;
-    }
-
-    eventTypeList.innerHTML = sorted.map(([label, count]) => `
-        <div class="event-type-row">
-            <div class="event-type-label">
-                <span title="${escHtml(label)}">${escHtml(label.length > 28 ? label.slice(0, 28) + '…' : label)}</span>
-                <span>${count}</span>
-            </div>
-            <div class="event-type-bar-bg">
-                <div class="event-type-bar-fill" style="width:${Math.round(count / max * 100)}%"></div>
-            </div>
-        </div>
-    `).join('');
+    const sorted = Object.entries(map).sort((a,b)=>b[1]-a[1]);
+    const max = sorted[0]?.[1] || 1;
+    if (!sorted.length) { el.innerHTML = '<div class="sidebar-empty">Inga händelsetyper.</div>'; return; }
+    el.innerHTML = sorted.map(([name, count]) => {
+        const pct = Math.round(count / max * 100);
+        return `
+        <div class="sidebar-row ${activeFilters.eventType.has(name) ? 'active-filter' : ''}"
+             onclick="toggleSidebarFilter('eventType','${esc(name)}')" title="Filtrera: ${esc(name)}">
+            <span class="sidebar-row-name">${esc(name.length > 20 ? name.slice(0,19)+'…' : name)}</span>
+            <div class="evt-bar-wrap"><div class="evt-bar-fill" style="width:${pct}%"></div></div>
+            <span class="sidebar-row-count">${count}</span>
+        </div>`;
+    }).join('');
 }
 
-function renderAnalysts() {
+function renderAnalystPanel() {
+    const el = $('analystList');
     const map = {};
-    allEvents.forEach(row => {
-        const { analyst } = parseAnalyst(row[COL.COMMENT]);
+    allEvents.forEach(r => {
+        const { analyst } = parseAnalyst(r[COL.COMMENT]);
         if (analyst !== '—') map[analyst] = (map[analyst] || 0) + 1;
     });
-
-    const sorted = Object.entries(map).sort((a, b) => b[1] - a[1]);
-
-    if (!sorted.length) {
-        analystList.innerHTML = '<div class="sidebar-empty">Inga analytiker ännu.</div>';
-        return;
-    }
-
-    analystList.innerHTML = sorted.map(([name, count]) => `
-        <div class="analyst-item">
-            <div class="analyst-avatar">${escHtml(name.slice(0, 2).toUpperCase())}</div>
-            <span class="analyst-name">${escHtml(name)}</span>
-            <span class="analyst-count">${count} loggar</span>
-        </div>
-    `).join('');
+    const sorted = Object.entries(map).sort((a,b)=>b[1]-a[1]);
+    if (!sorted.length) { el.innerHTML = '<div class="sidebar-empty">Inga analytiker.</div>'; return; }
+    // Analyst filter → we filter on comment field. We add a virtual filter key "analyst" by
+    // mapping analyst names into the user/comment search. Simplest: we store analyst name
+    // in a separate activeFilters.analyst set — but we only have 5 fields in our state.
+    // We'll handle analyst filtering via search trick: clicking analyst sets searchQuery to
+    // analyst name wrapped in brackets.
+    el.innerHTML = sorted.map(([name, count]) => `
+        <div class="sidebar-row ${searchQuery === '['+name+']' ? 'active-filter' : ''}"
+             onclick="filterByAnalyst('${esc(name)}')" title="Filtrera på ${esc(name)}">
+            <div class="analyst-avatar">${esc(name.slice(0,2).toUpperCase())}</div>
+            <span class="sidebar-row-name">${esc(name)}</span>
+            <span class="sidebar-row-count">${count} loggar</span>
+        </div>`).join('');
 }
 
-// ── Timeline render ────────────────────────────────
+function renderLogSourcePanel() {
+    const el = $('logSourceList');
+    const map = {};
+    allEvents.forEach(r => {
+        const v = r[COL.LOG_SOURCE];
+        if (v && v !== 'N/A') map[v] = (map[v] || 0) + 1;
+    });
+    const sorted = Object.entries(map).sort((a,b)=>b[1]-a[1]);
+    if (!sorted.length) { el.innerHTML = '<div class="sidebar-empty">Inga loggkällor.</div>'; return; }
+    el.innerHTML = sorted.map(([name, count]) => `
+        <div class="sidebar-row ${activeFilters.logSource.has(name) ? 'active-filter' : ''}"
+             onclick="toggleSidebarFilter('logSource','${esc(name)}')" title="${esc(name)}">
+            <span class="sidebar-row-name">${esc(name.length > 22 ? name.slice(0,21)+'…' : name)}</span>
+            <span class="sidebar-row-count">${count}</span>
+        </div>`).join('');
+}
+
+// Sidebar click → toggle filter set + rebuild panel + apply
+window.toggleSidebarFilter = function(key, value) {
+    const set = activeFilters[key];
+    if (set.has(value)) set.delete(value);
+    else                set.add(value);
+    updateFilterBadge();
+    rebuildFilterPanel();   // keep checkboxes in sync
+    renderSidebar();
+    applyFilters();
+    showToast(set.has(value) ? `✓ Filtrerar: ${value}` : `✕ Filter borttaget`);
+};
+
+window.filterByAnalyst = function(name) {
+    // Toggle: if already filtering this analyst, clear; otherwise set
+    const bracket = '[' + name + ']';
+    if (searchQuery === bracket) {
+        searchQuery = '';
+        searchInput.value = '';
+    } else {
+        searchQuery = bracket;
+        searchInput.value = bracket;
+    }
+    renderSidebar();
+    applyFilters();
+};
+
+// ── Apply Filters ─────────────────────────────────
+function applyFilters() {
+    const q = searchQuery.toLowerCase();
+
+    filteredEvents = allEvents.filter(row => {
+        // Multi-select filters
+        if (activeFilters.severity.size  && !activeFilters.severity.has(row[COL.SEVERITY] || '⚪ Info')) return false;
+        if (activeFilters.eventType.size && !activeFilters.eventType.has(eventLabel(row[COL.EVENT]))) return false;
+        if (activeFilters.srcHost.size   && !activeFilters.srcHost.has(row[COL.SRC_HOST])) return false;
+        if (activeFilters.user.size      && !activeFilters.user.has(row[COL.USER])) return false;
+        if (activeFilters.logSource.size && !activeFilters.logSource.has(row[COL.LOG_SOURCE])) return false;
+
+        // Date range
+        if (dateFrom || dateTo) {
+            const ts = new Date(row[COL.TIMESTAMP]);
+            if (isNaN(ts)) return false;
+            if (dateFrom && ts < dateFrom) return false;
+            if (dateTo   && ts > dateTo)   return false;
+        }
+
+        // Text / analyst search
+        if (q) {
+            const hay = [
+                row[COL.EVENT], row[COL.SRC_HOST], row[COL.DST_HOST],
+                row[COL.USER],  row[COL.DETAILS],  row[COL.COMMENT],
+                row[COL.PROCESS], row[COL.LOG_ID], row[COL.LOG_SOURCE]
+            ].join(' ').toLowerCase();
+            if (!hay.includes(q)) return false;
+        }
+        return true;
+    });
+
+    renderTimeline();
+    resultCount.textContent = `${filteredEvents.length} / ${allEvents.length} händelser`;
+}
+
+function clearAllFilters() {
+    Object.values(activeFilters).forEach(s => s.clear());
+    searchQuery = '';
+    searchInput.value = '';
+    dateFrom = null; dateTo = null;
+    dateFromEl.value = ''; dateToEl.value = '';
+    updateFilterBadge();
+    rebuildFilterPanel();
+    renderSidebar();
+    applyFilters();
+    showToast('✕ Alla filter rensade');
+}
+
+// ── Timeline ──────────────────────────────────────
 function renderTimeline() {
     loadingState.style.display = 'none';
-
     if (!filteredEvents.length) {
         emptyState.style.display = 'flex';
         timelineTrack.innerHTML  = '';
         return;
     }
-
     emptyState.style.display = 'none';
-
-    // Sort newest first
-    const sorted = [...filteredEvents].sort((a, b) => {
-        const ta = new Date(a[COL.TIMESTAMP]);
-        const tb = new Date(b[COL.TIMESTAMP]);
-        return tb - ta;
-    });
-
-    timelineTrack.innerHTML = sorted.map((row, i) => buildEventCard(row, i)).join('');
+    const sorted = [...filteredEvents].sort((a,b) =>
+        new Date(b[COL.TIMESTAMP]) - new Date(a[COL.TIMESTAMP])
+    );
+    timelineTrack.innerHTML = sorted.map((row, i) => buildCard(row, i)).join('');
 }
 
-function buildEventCard(row, idx) {
-    const sev     = sevKey(row[COL.SEVERITY]);
-    const ts      = fmtTs(row[COL.TIMESTAMP]);
-    const event   = row[COL.EVENT] || 'N/A';
-    const srcHost = row[COL.SRC_HOST] || 'N/A';
-    const dstHost = row[COL.DST_HOST] || 'N/A';
-    const user    = row[COL.USER] || 'N/A';
-    const process = row[COL.PROCESS] || 'N/A';
-    const details = row[COL.DETAILS] || 'N/A';
-    const logSrc  = row[COL.LOG_SOURCE] || 'N/A';
-    const os      = row[COL.HOST_OS] || 'N/A';
-    const logId   = row[COL.LOG_ID] || 'N/A';
-    const { analyst, text: comment } = parseAnalyst(row[COL.COMMENT]);
-
-    const eventShort = eventLabelShort(event);
-    const delay      = Math.min(idx * 0.03, 0.5);
+function buildCard(row, idx) {
+    const sev      = sevKey(row[COL.SEVERITY]);
+    const srcHost  = row[COL.SRC_HOST] || 'N/A';
+    const dstHost  = row[COL.DST_HOST] || 'N/A';
+    const user     = row[COL.USER] || 'N/A';
+    const evtShort = eventLabel(row[COL.EVENT] || 'N/A');
+    const delay    = Math.min(idx * 0.03, 0.5);
+    const { analyst, text: comment } = parseAnalyst(row[COL.COMMENT] || '');
 
     return `
     <div class="event-card" data-sev="${sev}" style="animation-delay:${delay}s" onclick="toggleCard(this)">
         <div class="event-header">
-            <span class="event-ts">${escHtml(ts)}</span>
-            <span class="event-sev-badge">${escHtml(row[COL.SEVERITY] || '⚪ Info')}</span>
-            <span class="event-type">${escHtml(eventShort)}</span>
+            <span class="event-ts">${esc(fmtTs(row[COL.TIMESTAMP]))}</span>
+            <span class="event-sev-badge">${esc(row[COL.SEVERITY] || '⚪ Info')}</span>
+            <span class="event-type">${esc(evtShort)}</span>
             <span class="expand-toggle">▾</span>
         </div>
-
         <div class="event-summary">
-            <span class="event-tag host" title="${escHtml(srcHost)}">⬡ ${escHtml(srcHost)}</span>
-            ${dstHost !== 'N/A' && dstHost !== srcHost ? `
-                <span class="event-tag arrow">→</span>
-                <span class="event-tag host" title="${escHtml(dstHost)}">${escHtml(dstHost)}</span>
-            ` : ''}
-            ${user !== 'N/A' ? `<span class="event-tag user">👤 ${escHtml(user)}</span>` : ''}
+            <span class="event-tag host" title="${esc(srcHost)}">⬡ ${esc(srcHost)}</span>
+            ${dstHost !== 'N/A' && dstHost !== srcHost
+                ? `<span class="event-tag arrow">→</span><span class="event-tag host" title="${esc(dstHost)}">${esc(dstHost)}</span>`
+                : ''}
+            ${user !== 'N/A' ? `<span class="event-tag user">👤 ${esc(user)}</span>` : ''}
         </div>
-
         <div class="event-detail">
-            ${detailRow('Log ID',      logId)}
-            ${detailRow('Tidsstämpel', row[COL.TIMESTAMP] || 'N/A')}
-            ${detailRow('Händelse',    event)}
-            ${detailRow('Detaljer',    details,  'highlight')}
-            ${detailRow('Process',     process)}
-            ${detailRow('Dst Host',    dstHost)}
-            ${detailRow('OS',          os)}
-            ${detailRow('Loggkälla',   logSrc)}
-            ${detailRow('Kommentar',   `[${analyst}] ${comment}`, 'comment')}
+            ${dRow('Log ID',      row[COL.LOG_ID],        '', true)}
+            ${dRow('Tidsstämpel', row[COL.TIMESTAMP])}
+            ${dRow('Händelse',    row[COL.EVENT])}
+            ${dRow('Detaljer',    row[COL.DETAILS],       'highlight')}
+            ${dRow('Process',     row[COL.PROCESS])}
+            ${dRow('Dst Host',    dstHost)}
+            ${dRow('OS',          row[COL.HOST_OS])}
+            ${dRow('Loggkälla',   row[COL.LOG_SOURCE])}
+            ${dRow('Kommentar',   `[${analyst}] ${comment}`, 'comment')}
         </div>
     </div>`;
 }
 
-function detailRow(label, value, cls = '') {
+function dRow(label, value, cls = '', copyable = false) {
     if (!value || value === 'N/A' || value === '[—] ') return '';
+    const cp = copyable
+        ? `onclick="event.stopPropagation();copyText('${esc(value)}')" title="Klicka för att kopiera"`
+        : '';
     return `
         <div class="detail-row">
-            <span class="detail-label">${escHtml(label)}</span>
-            <span class="detail-value ${cls}">${escHtml(value)}</span>
+            <span class="detail-label">${esc(label)}</span>
+            <span class="detail-value ${cls} ${copyable?'copyable':''}" ${cp}>${esc(value)}</span>
         </div>`;
 }
 
-// ── Interactions ────────────────────────────────────
-window.toggleCard = function(card) {
-    card.classList.toggle('expanded');
+// ── Interactions ──────────────────────────────────
+window.toggleCard = el => el.classList.toggle('expanded');
+
+window.copyText = text => {
+    navigator.clipboard.writeText(text).then(() => showToast(`✓ Kopierat`));
 };
 
-window.toggleHostFilter = function(host) {
-    activeHostFilter = activeHostFilter === host ? '' : host;
-    // Sync host-item active state
-    document.querySelectorAll('.host-item').forEach(el => {
-        el.classList.toggle('active-filter', el.dataset.host === activeHostFilter);
-    });
-    applyFilters();
-};
-
-// Severity filter pills
-document.querySelectorAll('.sev-filter').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.sev-filter').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        activeSevFilter = btn.dataset.sev;
-        applyFilters();
-    });
+// Filter panel toggle
+filterToggleBtn.addEventListener('click', () => {
+    filterPanelOpen = !filterPanelOpen;
+    filterPanel.classList.toggle('open', filterPanelOpen);
+    filterToggleBtn.classList.toggle('active', filterPanelOpen || totalActiveFilters() > 0);
 });
 
-// Text search (debounced)
+// Close filter panel when clicking outside
+document.addEventListener('click', e => {
+    if (filterPanelOpen &&
+        !filterPanel.contains(e.target) &&
+        !filterToggleBtn.contains(e.target)) {
+        filterPanelOpen = false;
+        filterPanel.classList.remove('open');
+        filterToggleBtn.classList.toggle('active', totalActiveFilters() > 0);
+    }
+});
+
+filterClearAll.addEventListener('click', clearAllFilters);
+
+// Search (debounced)
 let searchTimer;
 searchInput.addEventListener('input', () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => {
         searchQuery = searchInput.value.trim();
+        renderSidebar(); // update analyst highlight
         applyFilters();
     }, 200);
 });
 
-// Dropdowns
-hostFilter.addEventListener('change', applyFilters);
-userFilter.addEventListener('change', applyFilters);
+// Date range
+dateFromEl.addEventListener('change', () => { dateFrom = dateFromEl.value ? new Date(dateFromEl.value) : null; applyFilters(); });
+dateToEl.addEventListener('change',   () => { dateTo   = dateToEl.value   ? new Date(dateToEl.value)   : null; applyFilters(); });
+dateClearBtn.addEventListener('click', () => {
+    dateFromEl.value = ''; dateToEl.value = '';
+    dateFrom = null; dateTo = null;
+    applyFilters();
+});
 
-// Refresh button
-refreshBtn.addEventListener('click', () => {
-    clearTimeout(refreshTimer);
-    fetchTimeline();
+// Refresh
+refreshBtn.addEventListener('click', () => { clearTimeout(refreshTimer); fetchTimeline(); });
+
+// Keyboard: R = refresh, Escape = clear filters
+document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    if (e.key === 'r' || e.key === 'R') { clearTimeout(refreshTimer); fetchTimeline(); showToast('↺ Uppdaterar...'); }
+    if (e.key === 'Escape' && totalActiveFilters() > 0) clearAllFilters();
 });
 
 // ── Boot ──────────────────────────────────────────
