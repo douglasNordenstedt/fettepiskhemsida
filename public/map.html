@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Incident Map — IR Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.29.2/cytoscape.min.js"></script>
+<link rel="stylesheet" href="css/map.css">
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="nav">
+  <a href="/dashboard.html" class="nav-back">← Dashboard</a>
+  <div class="nav-title"><span class="nav-title-icon">⬡</span> Incident Map</div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="switchTab('auto')">🗺 Incident View</button>
+    <button class="nav-tab" onclick="switchTab('free')">✏️ Freehand</button>
+  </div>
+  <div class="nav-right">
+    <span class="edit-mode-badge" id="editBadge">● EDIT MODE</span>
+    <button class="tool-btn success" onclick="openSaveModal()" id="saveBtn">💾 Spara karta</button>
+    <button class="tool-btn" onclick="exportPNG()">📷 Exportera PNG</button>
+  </div>
+</nav>
+
+<!-- TOOLBAR -->
+<div class="toolbar" id="toolbar">
+  <!-- Auto tab toolbar -->
+  <div class="tool-group" id="autoTools">
+    <button class="tool-btn active" id="btnSelect" onclick="setMode('select')">↖ Välj</button>
+    <button class="tool-btn" id="btnEdit" onclick="toggleEditMode()">✏️ Redigera</button>
+    <div class="tool-sep"></div>
+    <button class="tool-btn" onclick="autoLayout('cose')">⚡ Auto-layout</button>
+    <button class="tool-btn" onclick="autoLayout('breadthfirst')">📐 Hierarki</button>
+    <button class="tool-btn" onclick="autoLayout('circle')">⭕ Cirkel</button>
+    <div class="tool-sep"></div>
+    <button class="tool-btn" onclick="fitAll()">⊡ Fit</button>
+    <button class="tool-btn" onclick="cy.zoom(cy.zoom()*1.3)">＋ Zoom</button>
+    <button class="tool-btn" onclick="cy.zoom(cy.zoom()*0.7)">－ Zoom</button>
+    <div class="tool-sep"></div>
+    <button class="tool-btn" id="btnScrubber" onclick="toggleScrubber()">⏱ Tidslinje</button>
+    <button class="tool-btn" onclick="reloadTimeline()">↺ Ladda om data</button>
+  </div>
+  <!-- Freehand tab toolbar (hidden by default) -->
+  <div class="tool-group" id="freeTools" style="display:none;">
+    <button class="tool-btn active" id="freeSelect" onclick="freeMode('select')">↖ Välj</button>
+    <div class="tool-sep"></div>
+    <button class="tool-btn" id="freeAddNode" onclick="freeMode('add-node')">＋ Lägg till nod</button>
+    <button class="tool-btn" id="freeAddEdge" onclick="freeMode('add-edge')">→ Rita koppling</button>
+    <button class="tool-btn danger" id="freeDelete" onclick="deleteSelected()">✕ Radera</button>
+    <div class="tool-sep"></div>
+    <button class="tool-btn" onclick="autoLayout('cose')">⚡ Auto-layout</button>
+    <button class="tool-btn" onclick="fitAll()">⊡ Fit</button>
+    <div class="tool-sep"></div>
+    <button class="tool-btn" onclick="importFromAuto()">📥 Importera från incident</button>
+    <button class="tool-btn" onclick="clearFreeCanvas()">🗑 Rensa</button>
+  </div>
+</div>
+
+<!-- MAIN LAYOUT -->
+<div class="main">
+  <!-- LEFT SIDEBAR: saved maps -->
+  <div class="sidebar">
+    <div style="padding:10px 12px 6px; border-bottom:1px solid var(--border); flex-shrink:0;">
+      <div class="sidebar-section-title" style="margin-bottom:0;">Sparade kartor</div>
+    </div>
+    <div class="sidebar-maps" id="mapList">
+      <div class="no-maps">Laddar kartor...</div>
+    </div>
+  </div>
+
+  <!-- CANVAS -->
+  <div class="canvas-wrap">
+    <div id="cy"></div>
+
+    <!-- TIMELINE SCRUBBER -->
+    <div class="scrubber hidden" id="scrubber">
+      <button class="scrub-play" id="playBtn" onclick="togglePlay()">▶</button>
+      <span class="scrub-label">Tidigt</span>
+      <input type="range" id="scrubRange" min="0" max="100" value="0" oninput="onScrub(this.value)">
+      <span class="scrub-label">Sent</span>
+      <span class="scrub-ts" id="scrubTs">—</span>
+    </div>
+
+    <!-- LEGEND -->
+    <div class="legend" id="legend">
+      <div class="legend-title">Teckenförklaring</div>
+      <div class="legend-row"><span class="sev-dot high"></span>Hög allvarlighet</div>
+      <div class="legend-row"><span class="sev-dot medium"></span>Medium</div>
+      <div class="legend-row"><span class="sev-dot low"></span>Låg</div>
+      <div class="legend-row"><span class="sev-dot info"></span>Info</div>
+      <div style="margin-top:6px; border-top:1px solid var(--border); padding-top:6px;">
+        <div class="legend-row"><span class="legend-line" style="background:var(--sev-high)"></span>Evidenserad koppling</div>
+        <div class="legend-row" style="margin-bottom:0">
+          <span style="width:22px;border-top:2px dashed var(--muted);display:inline-block;margin-right:7px;"></span>Analytiker-tillagd
+        </div>
+      </div>
+    </div>
+
+    <div class="minimap-hint">Scroll: zoom &nbsp;|&nbsp; Drag: panorera &nbsp;|&nbsp; Klick: detaljer</div>
+  </div>
+
+  <!-- RIGHT PANEL: node/edge detail -->
+  <div class="detail-panel hidden" id="detailPanel">
+    <div class="detail-header">
+      <div class="detail-title" id="detailTitle">Detaljer</div>
+      <button class="detail-close" onclick="closeDetail()">✕</button>
+    </div>
+    <div class="detail-body" id="detailBody"></div>
+  </div>
+</div>
+
+<!-- SAVE MODAL -->
+<div class="modal-overlay hidden" id="saveModal">
+  <div class="modal">
+    <h2>💾 Spara karta</h2>
+    <label>Kartnamn</label>
+    <input type="text" id="saveMapName" placeholder="T.ex. APT-utredning vecka 19" autocomplete="off">
+    <label>Ditt namn</label>
+    <input type="text" id="saveCreator" placeholder="T.ex. Marcus" autocomplete="off">
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeSaveModal()">Avbryt</button>
+      <button class="btn btn-primary" onclick="confirmSave()">Spara</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD NODE MODAL (freehand) -->
+<div class="modal-overlay hidden" id="addNodeModal">
+  <div class="modal">
+    <h2>＋ Lägg till nod</h2>
+    <label>Nodtyp</label>
+    <div class="node-type-row" id="nodeTypeRow">
+      <button class="node-type-btn active" data-type="host" onclick="selectNodeType(this)">💻 Värd</button>
+      <button class="node-type-btn" data-type="server" onclick="selectNodeType(this)">🖥 Server</button>
+      <button class="node-type-btn" data-type="dc" onclick="selectNodeType(this)">🏛 DC</button>
+      <button class="node-type-btn" data-type="internet" onclick="selectNodeType(this)">🌐 Internet</button>
+      <button class="node-type-btn" data-type="user" onclick="selectNodeType(this)">👤 Användare</button>
+      <button class="node-type-btn" data-type="unknown" onclick="selectNodeType(this)">❓ Okänd</button>
+    </div>
+    <label>Namn / IP / Hostname</label>
+    <input type="text" id="addNodeName" placeholder="T.ex. WINSERVER-01 eller 192.168.1.5" autocomplete="off">
+    <label>Anteckning (valfri)</label>
+    <input type="text" id="addNodeNote" placeholder="T.ex. Initial access-punkt" autocomplete="off">
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeAddNode()">Avbryt</button>
+      <button class="btn btn-primary" onclick="confirmAddNode()">Lägg till</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD EDGE MODAL (freehand) -->
+<div class="modal-overlay hidden" id="addEdgeModal">
+  <div class="modal">
+    <h2>→ Ny koppling</h2>
+    <label>Etikett / Beskrivning</label>
+    <input type="text" id="addEdgeLabel" placeholder="T.ex. Lateral movement, C2, RDP" autocomplete="off">
+    <label>Allvarlighet</label>
+    <select id="addEdgeSev">
+      <option value="high">🔴 High</option>
+      <option value="medium" selected>🟡 Medium</option>
+      <option value="low">🔵 Low</option>
+      <option value="info">⚪ Info</option>
+    </select>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeAddEdge()">Avbryt</button>
+      <button class="btn btn-primary" onclick="confirmAddEdge()">Skapa koppling</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="js/map.js"></script>
+</body>
+</html>
